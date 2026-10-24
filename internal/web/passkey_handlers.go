@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -114,6 +115,11 @@ func jsonError(w http.ResponseWriter, status int, msg string) {
 
 func (s *Server) passkeyRegisterBegin(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
+	if !s.recentLogin(r) {
+		s.setFlash(w, reauthMessage)
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": reauthMessage, "redirect": reauthURL})
+		return
+	}
 	var body struct{ Name string }
 	json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&body)
 	name := strings.Join(strings.Fields(body.Name), " ")
@@ -174,6 +180,19 @@ func (s *Server) passkeyRegisterFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.Info("passkey ajoutée", "user_id", user.ID)
+	s.sendSecurityEmail(user.Email, "FilamentManager : nouvelle passkey ajoutée à votre compte", fmt.Sprintf(`Bonjour %s,
+
+Une passkey « %s » vient d'être ajoutée à votre compte FilamentManager (%s).
+Elle permet de se connecter sans email.
+
+Si ce n'est pas vous : connectez-vous avec le lien reçu par email, supprimez cette passkey
+et déconnectez les autres sessions depuis la page Mon compte :
+
+%s/account
+
+--
+FilamentManager
+`, user.DisplayName, cer.name, time.Now().In(paris).Format("02/01/2006 à 15h04"), s.cfg.BaseURL.String()))
 	s.setFlash(w, "Passkey « "+cer.name+" » ajoutée : vous pourrez vous connecter sans email.")
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
@@ -182,6 +201,9 @@ func (s *Server) passkeyDelete(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
 		s.notFound(w, r)
+		return
+	}
+	if !s.requireRecentLogin(w, r) {
 		return
 	}
 	if err := s.store.DeletePasskey(r.Context(), currentUser(r).ID, id); err != nil {

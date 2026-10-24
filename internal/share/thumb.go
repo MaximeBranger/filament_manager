@@ -12,6 +12,12 @@ import (
 // ThumbSize est la taille (px) des miniatures.
 const ThumbSize = 256
 
+// ThumbPixelBudget plafonne le nombre de pixels testés pendant la rasterisation (somme des
+// boîtes englobantes des triangles). Un vrai modèle, fait de petits triangles, en consomme une
+// fraction ; un fichier piégé (grands triangles superposés) donne une miniature partielle au
+// lieu de monopoliser le processeur plusieurs minutes. Modifiable en test.
+var ThumbPixelBudget = 200_000_000
+
 // ThumbKey renvoie le nom du fichier miniature associé à un maillage.
 func ThumbKey(meshKey string) string { return strings.TrimSuffix(meshKey, ".fmm") + ".png" }
 
@@ -59,7 +65,8 @@ func RenderThumbnail(m *Mesh) ([]byte, error) {
 	// Lumière venant du haut à gauche, légèrement vers la caméra.
 	lx, ly, lz := -0.35, 0.85, -0.4
 
-	for t := 0; t+2 < n; t += 3 {
+	budget := ThumbPixelBudget
+	for t := 0; t+2 < n && budget > 0; t += 3 {
 		a, b, c := t, t+1, t+2
 		// Normale dans l'espace écran (x, haut, profondeur) pour l'éclairage.
 		ux, uy, uz := sx[b]-sx[a], -(sy[b] - sy[a]), sz[b]-sz[a]
@@ -76,9 +83,10 @@ func RenderThumbnail(m *Mesh) ([]byte, error) {
 		y0 := int(math.Max(0, math.Floor(min(sy[a], sy[b], sy[c]))))
 		y1 := int(math.Min(float64(size-1), math.Ceil(max(sy[a], sy[b], sy[c]))))
 		area := (sx[b]-sx[a])*(sy[c]-sy[a]) - (sx[c]-sx[a])*(sy[b]-sy[a])
-		if area == 0 {
+		if area == 0 || x1 < x0 || y1 < y0 {
 			continue
 		}
+		budget -= (x1 - x0 + 1) * (y1 - y0 + 1)
 		for py := y0; py <= y1; py++ {
 			fy := float64(py) + 0.5
 			for px := x0; px <= x1; px++ {

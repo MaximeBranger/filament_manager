@@ -2,6 +2,8 @@ module github.com/MaximeBranger/filament_manager
 
 go 1.26.0
 
+toolchain go1.26.10
+
 require (
 	github.com/fxamacker/cbor/v2 v2.9.6
 	github.com/go-webauthn/webauthn v0.18.2

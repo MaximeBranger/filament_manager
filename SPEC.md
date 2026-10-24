@@ -300,6 +300,8 @@ Règles d'intégrité applicatives (vérifiées dans le code + tests) :
 - Cookie `session` : jeton aléatoire 32 octets, `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`. Stocké hashé en base.
 - Durée `SESSION_TTL` (30 j), glissante (renouvelée si `last_seen_at` > 24 h).
 - Déconnexion = suppression de la session.
+- « Mon compte » indique le nombre d'autres sessions ouvertes et permet de les fermer toutes (appareil perdu, session volée).
+- **Connexion récente** : ajouter ou supprimer une passkey et supprimer le compte exigent une session ouverte il y a moins de 15 min. Sinon, renvoi vers `/login?reauth=1&next=/account` (email prérempli) ; la nouvelle connexion remplace la session du navigateur.
 
 ### 5.3 Limitation des envois (en mémoire, sans dépendance)
 - Par email : `RATE_LIMIT_EMAIL` (défaut 3 / 15 min).
@@ -314,7 +316,7 @@ Règles d'intégrité applicatives (vérifiées dans le code + tests) :
 
 ### 5.5 v2 — Passkeys
 WebAuthn en complément, le lien magique restant le moyen de récupération. Bibliothèque `github.com/go-webauthn/webauthn` (pas de vérification cryptographique maison).
-- **Ajout** depuis « Mon compte » : nom de l'appareil (≤ 50 caractères), passkey **découvrable** obligatoire (`residentKey: required`), vérification de l'utilisateur préférée, attestation `none`, exclusion des passkeys déjà enregistrées. Liste avec dates d'ajout et de dernière utilisation, suppression.
+- **Ajout** depuis « Mon compte » : nom de l'appareil (≤ 50 caractères), passkey **découvrable** obligatoire (`residentKey: required`), vérification de l'utilisateur préférée, attestation `none`, exclusion des passkeys déjà enregistrées. Liste avec dates d'ajout et de dernière utilisation, suppression. Chaque ajout déclenche un email d'alerte, envoyé même si les notifications sont désactivées.
 - **Connexion** sans saisir d'email : bouton « Se connecter avec une passkey » et suggestion du navigateur dans le champ email (médiation conditionnelle, `autocomplete="email webauthn"`). Le paramètre `next` est conservé.
 - **Défis** : gardés en mémoire côté serveur (instance unique), à usage unique, 5 min, référencés par un cookie `webauthn`. Limite de 30 débuts de connexion / 15 min par IP.
 - **Contrôles** : origine = `BASE_URL`, RP ID = `WEBAUTHN_RP_ID` ; compteur de signatures mis à jour à chaque connexion, connexion refusée si le compteur recule (passkey possiblement clonée).
@@ -362,6 +364,7 @@ WebAuthn en complément, le lien magique restant le moyen de récupération. Bib
   - EAN inconnu → mini-formulaire produit, puis reprise du scan.
   - Anti-doublon : un même code lu en continu n'est compté qu'une fois tant qu'il n'a pas quitté le champ (~1,5 s).
   - Validation finale : date d'achat commune (défaut aujourd'hui), fournisseur commun optionnel → création en une transaction.
+  - Plafonds par réception : 100 lignes et 500 bobines au total (la transaction bloque les autres écritures).
 
 ---
 

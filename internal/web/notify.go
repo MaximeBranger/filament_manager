@@ -82,6 +82,23 @@ func (s *Server) dispatch(notifs []store.Notification) {
 	}
 }
 
+// sendSecurityEmail prévient d'un changement sensible du compte, même si l'utilisateur a
+// désactivé les notifications. En arrière-plan sauf en test.
+func (s *Server) sendSecurityEmail(to, subject, text string) {
+	send := func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		if err := s.mailer.Send(ctx, mailer.Message{To: to, Subject: subject, Text: text}); err != nil {
+			s.log.Error("email de sécurité non envoyé", "err", err)
+		}
+	}
+	if s.syncMail {
+		send()
+	} else {
+		go send()
+	}
+}
+
 func (s *Server) emailNotification(n store.Notification) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()

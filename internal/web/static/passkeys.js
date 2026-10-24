@@ -28,7 +28,11 @@
       body: JSON.stringify(body || {}),
     });
     const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(data.error || 'Une erreur est survenue.');
+    if (!resp.ok) {
+      // Connexion trop ancienne pour une action sensible : le serveur demande de la confirmer.
+      if (data.redirect) window.location.href = data.redirect;
+      throw new Error(data.error || 'Une erreur est survenue.');
+    }
     return data;
   }
 

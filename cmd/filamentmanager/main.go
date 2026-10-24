@@ -89,6 +89,10 @@ func run() error {
 		return err
 	}
 
+	// Avant d'accepter des requêtes : un envoi en cours ne doit pas passer pour un orphelin.
+	if err := srv.CleanShareOrphans(ctx); err != nil {
+		log.Error("nettoyage des partages orphelins", "err", err)
+	}
 	go srv.PurgeLoop(ctx)
 	go srv.SharePurgeLoop(ctx)
 	if cfg.BackupDir != "" {

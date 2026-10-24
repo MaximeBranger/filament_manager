@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/MaximeBranger/filament_manager/internal/db"
 	"github.com/MaximeBranger/filament_manager/internal/mail"
 	"github.com/MaximeBranger/filament_manager/internal/reference"
+	"github.com/MaximeBranger/filament_manager/internal/stock"
 	"github.com/MaximeBranger/filament_manager/internal/store"
 )
 
@@ -254,6 +256,54 @@ func TestCodeAttemptsAreLimited(t *testing.T) {
 	r := c.post("/login/code", url.Values{"code": {code}})
 	if r.Status != http.StatusUnprocessableEntity || !strings.Contains(r.Body, "expiré") {
 		t.Errorf("bon code accepté après %d échecs : %d", maxCodeAttempts, r.Status)
+	}
+}
+
+// Des essais envoyés en parallèle ne doivent pas dépasser le plafond d'un défi.
+func TestCodeAttemptsLimitedUnderConcurrency(t *testing.T) {
+	app := newTestApp(t)
+	c := app.newClient()
+	c.loginEmail("dave@example.fr")
+	var wg sync.WaitGroup
+	for range 50 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			req, _ := http.NewRequest(http.MethodPost, app.srv.URL+"/login/code", strings.NewReader("code=000000"))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			if resp, err := c.http.Do(req); err == nil {
+				resp.Body.Close()
+			}
+		}()
+	}
+	wg.Wait()
+	var attempts int
+	if err := app.store.DB.QueryRow(`SELECT attempts FROM login_challenges`).Scan(&attempts); err != nil {
+		t.Fatal(err)
+	}
+	if attempts > maxCodeAttempts {
+		t.Errorf("%d essais comparés, plafond %d", attempts, maxCodeAttempts)
+	}
+}
+
+// Redemander un email ne redonne pas d'essais au-delà du plafond par adresse.
+func TestCodeAttemptsLimitedPerEmail(t *testing.T) {
+	app := newTestAppEnv(t, map[string]string{"RATE_LIMIT_EMAIL": "10/15m"})
+	c := app.newClient()
+	var code string
+	for range 3 {
+		_, code = c.loginEmail("erin@example.fr")
+		wrong := "000000"
+		if code == wrong {
+			wrong = "111111"
+		}
+		for range 4 {
+			c.post("/login/code", url.Values{"code": {wrong}})
+		}
+	}
+	r := c.post("/login/code", url.Values{"code": {code}})
+	if r.Status != http.StatusTooManyRequests {
+		t.Errorf("essai au-delà du plafond par adresse : %d", r.Status)
 	}
 }
 
@@ -496,6 +546,27 @@ func TestReception(t *testing.T) {
 	}
 	if r := c.get("/stock?brand=polymaker"); !strings.Contains(r.Body, "Polymaker") {
 		t.Error("la marque doit reprendre la graphie de la liste de référence")
+	}
+
+	// Plafonds : nombre de lignes, puis nombre total de bobines.
+	line := map[string]any{"product_id": products[0].ID, "quantity": 1}
+	tooMany := make([]map[string]any, maxReceptionItems+1)
+	for i := range tooMany {
+		tooMany[i] = line
+	}
+	if r := c.postJSON("/reception", map[string]any{"items": tooMany}); r.Status != http.StatusUnprocessableEntity {
+		t.Errorf("réception de %d lignes acceptée : %d", len(tooMany), r.Status)
+	}
+	big := map[string]any{"product_id": products[0].ID, "quantity": stock.MaxQuantity}
+	heavy := make([]map[string]any, maxReceptionSpools/stock.MaxQuantity+1)
+	for i := range heavy {
+		heavy[i] = big
+	}
+	if r := c.postJSON("/reception", map[string]any{"items": heavy}); r.Status != http.StatusUnprocessableEntity {
+		t.Errorf("réception de plus de %d bobines acceptée : %d", maxReceptionSpools, r.Status)
+	}
+	if n := len(spoolIDs(c.get("/stock").Body)); n != 6 {
+		t.Errorf("une réception refusée ne doit rien créer : %d bobines", n)
 	}
 
 	r = c.postJSON("/reception", map[string]any{"items": []map[string]any{

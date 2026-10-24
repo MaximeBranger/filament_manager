@@ -84,6 +84,7 @@ func (s *Store) DeleteUser(ctx context.Context, userID int64) error {
 type Session struct {
 	IDHash     string
 	UserID     int64
+	CreatedAt  time.Time // moment de la connexion : sert à exiger une connexion récente
 	ExpiresAt  time.Time
 	LastSeenAt time.Time
 }
@@ -98,8 +99,8 @@ func (s *Store) CreateSession(ctx context.Context, idHash string, userID int64, 
 // SessionByHash renvoie une session non expirée.
 func (s *Store) SessionByHash(ctx context.Context, idHash string) (*Session, error) {
 	sess := &Session{IDHash: idHash}
-	err := s.DB.QueryRowContext(ctx, `SELECT user_id, expires_at, last_seen_at FROM sessions WHERE id_hash = ? AND expires_at > ?`,
-		idHash, s.now()).Scan(&sess.UserID, ts{&sess.ExpiresAt}, ts{&sess.LastSeenAt})
+	err := s.DB.QueryRowContext(ctx, `SELECT user_id, created_at, expires_at, last_seen_at FROM sessions WHERE id_hash = ? AND expires_at > ?`,
+		idHash, s.now()).Scan(&sess.UserID, ts{&sess.CreatedAt}, ts{&sess.ExpiresAt}, ts{&sess.LastSeenAt})
 	if err != nil {
 		return nil, notFound(err)
 	}
@@ -115,6 +116,25 @@ func (s *Store) RenewSession(ctx context.Context, idHash string, expiresAt time.
 func (s *Store) DeleteSession(ctx context.Context, idHash string) error {
 	_, err := s.DB.ExecContext(ctx, `DELETE FROM sessions WHERE id_hash = ?`, idHash)
 	return err
+}
+
+// CountSessions renvoie le nombre de sessions actives de l'utilisateur.
+func (s *Store) CountSessions(ctx context.Context, userID int64) (int, error) {
+	var n int
+	err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM sessions WHERE user_id = ? AND expires_at > ?`,
+		userID, s.now()).Scan(&n)
+	return n, err
+}
+
+// DeleteOtherSessions ferme toutes les sessions de l'utilisateur sauf keepHash et renvoie leur nombre.
+func (s *Store) DeleteOtherSessions(ctx context.Context, userID int64, keepHash string) (int, error) {
+	res, err := s.DB.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ? AND id_hash != ? AND expires_at > ?`,
+		userID, keepHash, s.now())
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	return int(n), err
 }
 
 // Défis de connexion (lien magique + code) ------------------------------------------
@@ -168,9 +188,14 @@ func (s *Store) LatestChallengeForBrowser(ctx context.Context, browserHash strin
 		ORDER BY id DESC LIMIT 1`, browserHash, s.now()))
 }
 
-func (s *Store) IncrementChallengeAttempts(ctx context.Context, id int64) error {
-	_, err := s.DB.ExecContext(ctx, `UPDATE login_challenges SET attempts = attempts + 1 WHERE id = ?`, id)
-	return err
+// ClaimChallengeAttempt réserve un essai de code et renvoie le nombre d'essais consommés.
+// La vérification du plafond et l'incrément sont atomiques : des requêtes parallèles ne
+// peuvent pas dépasser max. Renvoie ErrNotFound si le plafond est atteint ou le défi utilisé.
+func (s *Store) ClaimChallengeAttempt(ctx context.Context, id int64, max int) (int, error) {
+	var attempts int
+	err := s.DB.QueryRowContext(ctx, `UPDATE login_challenges SET attempts = attempts + 1
+		WHERE id = ? AND attempts < ? AND used_at IS NULL RETURNING attempts`, id, max).Scan(&attempts)
+	return attempts, notFound(err)
 }
 
 // ConsumeChallenge marque le défi comme utilisé. Renvoie ErrNotFound s'il l'était déjà

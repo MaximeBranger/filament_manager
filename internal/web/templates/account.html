@@ -48,9 +48,20 @@
   <p><a class="btn" href="/account/export.csv">Export CSV</a> <a class="btn" href="/account/export.json">Export JSON</a></p>
 </div>
 
-<form method="post" action="/logout" class="card">
-  <button class="btn">Se déconnecter</button>
-</form>
+<div class="card">
+  <h2>Sessions</h2>
+  {{if .OtherSessions}}
+  <p class="muted">Vous êtes aussi connecté sur {{.OtherSessions}} autre{{if gt .OtherSessions 1}}s{{end}} navigateur{{if gt .OtherSessions 1}}s{{end}} ou appareil{{if gt .OtherSessions 1}}s{{end}}.</p>
+  <form method="post" action="/account/sessions/revoke" class="inline" data-confirm="Déconnecter tous les autres navigateurs et appareils ?">
+    <button class="btn">Déconnecter les autres sessions</button>
+  </form>
+  {{else}}
+  <p class="muted">Aucune autre session ouverte.</p>
+  {{end}}
+  <form method="post" action="/logout" class="inline">
+    <button class="btn">Se déconnecter</button>
+  </form>
+</div>
 
 <form method="post" action="/account/delete" class="danger-zone" data-confirm="Supprimer définitivement votre compte et toutes vos données ?">
   <h2>Supprimer mon compte</h2>

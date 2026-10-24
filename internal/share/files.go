@@ -13,6 +13,9 @@ import (
 // Maillages (.fmm) et miniatures (.png) partagent le même nom aléatoire.
 var keyPattern = regexp.MustCompile(`^[0-9a-f]{32}\.(fmm|png)$`)
 
+// tempPattern reconnaît les fichiers temporaires de Write (os.CreateTemp).
+var tempPattern = regexp.MustCompile(`^\.upload-[0-9]+$`)
+
 // NewStorageKey renvoie un nom de fichier aléatoire.
 func NewStorageKey() string {
 	b := make([]byte, 16)
@@ -72,8 +75,10 @@ func Remove(dir, key string) error {
 	return nil
 }
 
-// CleanOrphans supprime les fichiers du dossier qui ne correspondent à aucune clé connue
-// (restes d'un arrêt brutal). Renvoie le nombre de fichiers supprimés.
+// CleanOrphans supprime les fichiers de l'application (maillages, miniatures, envois temporaires)
+// qui ne correspondent à aucune clé connue (restes d'un arrêt brutal). Tout autre fichier est
+// ignoré : un SHARE_DIR mal configuré (ex. le dossier de la base) ne doit rien perdre.
+// À appeler sans envoi en cours. Renvoie le nombre de fichiers supprimés.
 func CleanOrphans(dir string, known map[string]bool) (int, error) {
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -84,10 +89,11 @@ func CleanOrphans(dir string, known map[string]bool) (int, error) {
 	}
 	removed := 0
 	for _, e := range entries {
-		if e.IsDir() || known[e.Name()] {
+		name := e.Name()
+		if !e.Type().IsRegular() || known[name] || !(keyPattern.MatchString(name) || tempPattern.MatchString(name)) {
 			continue
 		}
-		if err := os.Remove(filepath.Join(dir, e.Name())); err != nil {
+		if err := os.Remove(filepath.Join(dir, name)); err != nil {
 			return removed, err
 		}
 		removed++

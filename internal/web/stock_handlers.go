@@ -597,6 +597,13 @@ func (s *Server) receptionPage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Plafonds d'une réception : une seule transaction bloque les autres écritures, sa taille
+// doit rester celle d'un vrai colis.
+const (
+	maxReceptionItems  = 100
+	maxReceptionSpools = 500
+)
+
 type receptionRequest struct {
 	PurchaseDate string `json:"purchase_date"`
 	Supplier     string `json:"supplier"`
@@ -616,6 +623,11 @@ func (s *Server) receptionSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.Items) == 0 {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": "Aucune bobine à enregistrer."})
+		return
+	}
+	if len(req.Items) > maxReceptionItems {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+			"error": "Trop de lignes : " + strconv.Itoa(maxReceptionItems) + " au maximum par réception."})
 		return
 	}
 
@@ -659,6 +671,11 @@ func (s *Server) receptionSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(itemErrors) > 0 {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": "Certaines lignes sont invalides.", "items": itemErrors})
+		return
+	}
+	if total > maxReceptionSpools {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+			"error": "Trop de bobines : " + strconv.Itoa(maxReceptionSpools) + " au maximum par réception."})
 		return
 	}
 

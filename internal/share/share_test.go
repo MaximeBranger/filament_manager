@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // binarySTL fabrique un STL binaire à partir de triangles (9 coordonnées chacun).
@@ -143,13 +144,22 @@ func TestFiles(t *testing.T) {
 	if err := Write(dir, "../evil.fmm", nil); err == nil {
 		t.Error("clé de stockage hors format acceptée")
 	}
-	os.WriteFile(filepath.Join(dir, "orphelin.fmm"), nil, 0o600)
+	orphan := NewStorageKey()
+	for _, name := range []string{orphan, ThumbKey(orphan), ".upload-123", "app.db", "app.db-wal", "orphelin.fmm"} {
+		os.WriteFile(filepath.Join(dir, name), nil, 0o600)
+	}
 	n, err := CleanOrphans(dir, map[string]bool{key: true})
-	if err != nil || n != 1 {
+	if err != nil || n != 3 {
 		t.Errorf("orphelins : %d, %v", n, err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, key)); err != nil {
 		t.Error("fichier connu supprimé")
+	}
+	// Un SHARE_DIR mal configuré ne doit jamais emporter d'autres fichiers (ex. la base).
+	for _, name := range []string{"app.db", "app.db-wal", "orphelin.fmm"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Errorf("fichier étranger %s supprimé", name)
+		}
 	}
 	if err := Remove(dir, key); err != nil {
 		t.Error(err)
@@ -185,5 +195,31 @@ func TestRenderThumbnail(t *testing.T) {
 	}
 	if ThumbKey("0123456789abcdef0123456789abcdef.fmm") != "0123456789abcdef0123456789abcdef.png" {
 		t.Error("ThumbKey")
+	}
+}
+
+func TestRenderThumbnailBudget(t *testing.T) {
+	// Fichier piégé : de grands triangles superposés, chacun couvrant presque toute l'image.
+	tris := make([][9]float32, 5000)
+	for i := range tris {
+		z := float32(i) * 0.001
+		tris[i] = [9]float32{-100, -100, z, 100, -100, z, -100, 100, z}
+	}
+	m, err := ParseSTL(binarySTL("", tris...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func(b int) { ThumbPixelBudget = b }(ThumbPixelBudget)
+	ThumbPixelBudget = 1_000_000 // quelques triangles seulement
+	start := time.Now()
+	data, err := RenderThumbnail(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(start); d > 2*time.Second {
+		t.Errorf("rendu non borné : %v", d)
+	}
+	if img, err := png.Decode(bytes.NewReader(data)); err != nil || img.Bounds().Dx() != ThumbSize {
+		t.Errorf("miniature partielle invalide : %v", err)
 	}
 }

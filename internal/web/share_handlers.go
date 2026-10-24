@@ -615,11 +615,9 @@ func (s *Server) CleanShareOrphans(ctx context.Context) error {
 	return err
 }
 
-// SharePurgeLoop nettoie les orphelins au démarrage puis les partages expirés toutes les 15 min.
+// SharePurgeLoop supprime les partages expirés toutes les 15 min. Les orphelins sont nettoyés
+// au démarrage par CleanShareOrphans, avant l'ouverture du port (aucun envoi en cours).
 func (s *Server) SharePurgeLoop(ctx context.Context) {
-	if err := s.CleanShareOrphans(ctx); err != nil {
-		s.log.Error("nettoyage des partages orphelins", "err", err)
-	}
 	ticker := time.NewTicker(sharePurgeEvery)
 	defer ticker.Stop()
 	for {

@@ -18,16 +18,23 @@ import (
 
 const (
 	maxCodeAttempts = 5
-	signupTTL       = 30 * time.Minute
-	maxNameLength   = 50
+	// maxCodeAttemptsPerEmail plafonne les essais de code par adresse et par heure.
+	maxCodeAttemptsPerEmail = 10
+	signupTTL               = 30 * time.Minute
+	maxNameLength           = 50
 )
 
 func (s *Server) loginForm(w http.ResponseWriter, r *http.Request) {
-	if currentUser(r) != nil {
-		http.Redirect(w, r, "/stock", http.StatusSeeOther)
-		return
+	data := map[string]any{"Next": safeNext(r.URL.Query().Get("next"))}
+	if u := currentUser(r); u != nil {
+		// reauth : un utilisateur connecté confirme son identité avant une action sensible.
+		if r.URL.Query().Get("reauth") == "" {
+			http.Redirect(w, r, "/stock", http.StatusSeeOther)
+			return
+		}
+		data["Email"] = u.Email
 	}
-	s.render(w, r, http.StatusOK, "login", map[string]any{"Next": safeNext(r.URL.Query().Get("next"))})
+	s.render(w, r, http.StatusOK, "login", data)
 }
 
 func normalizeEmail(raw string) (string, bool) {
@@ -126,7 +133,7 @@ func (s *Server) codeSubmit(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	ch, err := s.store.LatestChallengeForBrowser(r.Context(), auth.HashToken(c.Value))
-	if errors.Is(err, store.ErrNotFound) || (err == nil && ch.Attempts >= maxCodeAttempts) {
+	if errors.Is(err, store.ErrNotFound) {
 		expired()
 		return
 	}
@@ -134,13 +141,27 @@ func (s *Server) codeSubmit(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	if err := s.store.IncrementChallengeAttempts(r.Context(), ch.ID); err != nil {
+	// Plafond par adresse, tous défis confondus : demander de nouveaux emails ne donne pas
+	// de nouveaux essais. Le lien reçu par email reste utilisable.
+	if !s.codeRate.Allow(ch.Email) {
+		s.log.Warn("limite d'essais de code atteinte", "ip", auth.ClientIP(r, s.cfg.TrustedProxies))
+		s.render(w, r, http.StatusTooManyRequests, "login_code", map[string]any{
+			"Error": "Trop d'essais pour cette adresse. Utilisez le lien reçu par email, ou réessayez plus tard.",
+		})
+		return
+	}
+	attempts, err := s.store.ClaimChallengeAttempt(r.Context(), ch.ID, maxCodeAttempts)
+	if errors.Is(err, store.ErrNotFound) {
+		expired()
+		return
+	}
+	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
 	code := strings.ReplaceAll(strings.TrimSpace(r.FormValue("code")), " ", "")
 	if !auth.Equal(auth.HashCode(s.cfg.SessionSecret, ch.TokenHash, code), ch.CodeHash) {
-		left := maxCodeAttempts - ch.Attempts - 1
+		left := maxCodeAttempts - attempts
 		if left <= 0 {
 			expired()
 			return
@@ -197,8 +218,14 @@ func (s *Server) completeLogin(w http.ResponseWriter, r *http.Request, ch *store
 	s.startSession(w, r, user.ID, ch.NextPath)
 }
 
-// createSession ouvre une session et pose son cookie.
+// createSession ouvre une session et pose son cookie. Une session déjà ouverte dans ce
+// navigateur (nouvelle connexion pour confirmer son identité) est remplacée.
 func (s *Server) createSession(w http.ResponseWriter, r *http.Request, userID int64) error {
+	if old := currentSession(r); old != nil {
+		if err := s.store.DeleteSession(r.Context(), old.IDHash); err != nil {
+			return err
+		}
+	}
 	token := auth.NewToken()
 	expires := time.Now().Add(s.cfg.SessionTTL)
 	if err := s.store.CreateSession(r.Context(), auth.HashToken(token), userID, expires); err != nil {
@@ -277,8 +304,8 @@ func (s *Server) signupSubmit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
-	if hash, ok := r.Context().Value(sessionKey).(string); ok {
-		if err := s.store.DeleteSession(r.Context(), hash); err != nil {
+	if sess := currentSession(r); sess != nil {
+		if err := s.store.DeleteSession(r.Context(), sess.IDHash); err != nil {
 			s.log.Error("suppression de session", "err", err)
 		}
 	}

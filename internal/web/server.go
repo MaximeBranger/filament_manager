@@ -31,6 +31,7 @@ type Server struct {
 	pages     map[string]*pageTemplate
 	emailRate *auth.RateLimiter
 	ipRate    *auth.RateLimiter
+	codeRate  *auth.RateLimiter // essais de code par adresse email
 	// Limites des pages publiques de partage, par IP et par partage.
 	unlockRate *auth.RateLimiter
 	choiceRate *auth.RateLimiter
@@ -55,6 +56,7 @@ func New(cfg *config.Config, st *store.Store, mailer mail.Mailer, log *slog.Logg
 		version:   version,
 		emailRate: auth.NewRateLimiter(cfg.RateLimitEmail.Count, cfg.RateLimitEmail.Window),
 		ipRate:    auth.NewRateLimiter(cfg.RateLimitIP.Count, cfg.RateLimitIP.Window),
+		codeRate:  auth.NewRateLimiter(maxCodeAttemptsPerEmail, time.Hour),
 
 		unlockRate: auth.NewRateLimiter(5, 15*time.Minute),
 		choiceRate: auth.NewRateLimiter(10, 15*time.Minute),
@@ -183,6 +185,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /account/name", user(s.accountName))
 	mux.Handle("GET /account/export.json", user(s.exportJSON))
 	mux.Handle("GET /account/export.csv", user(s.exportCSV))
+	mux.Handle("POST /account/sessions/revoke", user(s.accountSessionsRevoke))
 	mux.Handle("POST /account/delete", user(s.accountDelete))
 
 	cop := http.NewCrossOriginProtection()

@@ -21,8 +21,27 @@ func (s *Server) renderAccount(w http.ResponseWriter, r *http.Request, status in
 		s.serverError(w, r, err)
 		return
 	}
+	sessions, err := s.store.CountSessions(r.Context(), currentUser(r).ID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	data["Passkeys"] = passkeys
+	data["OtherSessions"] = max(sessions-1, 0)
 	s.render(w, r, status, "account", data)
+}
+
+// accountSessionsRevoke ferme toutes les sessions sauf celle-ci (appareil perdu, session volée).
+// Pas de connexion récente exigée : c'est le recours de la victime.
+func (s *Server) accountSessionsRevoke(w http.ResponseWriter, r *http.Request) {
+	n, err := s.store.DeleteOtherSessions(r.Context(), currentUser(r).ID, currentSession(r).IDHash)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.log.Info("autres sessions fermées", "user_id", currentUser(r).ID, "count", n)
+	s.setFlash(w, strconv.Itoa(n)+" "+pluralize(n, "autre session fermée", "autres sessions fermées")+".")
+	http.Redirect(w, r, "/account", http.StatusSeeOther)
 }
 
 func (s *Server) accountPage(w http.ResponseWriter, r *http.Request) {
@@ -186,6 +205,9 @@ func (s *Server) exportCSV(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) accountDelete(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
+	if !s.requireRecentLogin(w, r) {
+		return
+	}
 	if !strings.EqualFold(strings.TrimSpace(r.FormValue("confirm_email")), user.Email) {
 		s.renderAccount(w, r, http.StatusUnprocessableEntity, map[string]any{
 			"Title": "Mon compte", "DeleteError": "L'adresse saisie ne correspond pas à votre compte.",

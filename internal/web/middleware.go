@@ -32,6 +32,36 @@ func currentUser(r *http.Request) *store.User {
 	return u
 }
 
+func currentSession(r *http.Request) *store.Session {
+	sess, _ := r.Context().Value(sessionKey).(*store.Session)
+	return sess
+}
+
+// reauthWindow est l'ancienneté maximale de la connexion pour les actions sensibles (passkeys,
+// suppression du compte) : une session volée ne suffit pas à s'installer durablement.
+const reauthWindow = 15 * time.Minute
+
+const reauthURL = "/login?reauth=1&next=%2Faccount"
+
+const reauthMessage = "Par sécurité, confirmez votre identité pour effectuer cette action."
+
+// recentLogin indique si la session courante a été ouverte il y a moins de reauthWindow.
+func (s *Server) recentLogin(r *http.Request) bool {
+	sess := currentSession(r)
+	return sess != nil && s.store.Now().Sub(sess.CreatedAt) < reauthWindow
+}
+
+// requireRecentLogin renvoie vers la connexion si la session est trop ancienne ; false si la
+// réponse a été envoyée.
+func (s *Server) requireRecentLogin(w http.ResponseWriter, r *http.Request) bool {
+	if s.recentLogin(r) {
+		return true
+	}
+	s.setFlash(w, reauthMessage)
+	http.Redirect(w, r, reauthURL, http.StatusSeeOther)
+	return false
+}
+
 type statusWriter struct {
 	http.ResponseWriter
 	status int
@@ -125,7 +155,7 @@ func (s *Server) loadSession(next http.Handler) http.Handler {
 			}
 		}
 		ctx := context.WithValue(r.Context(), userKey, user)
-		ctx = context.WithValue(ctx, sessionKey, hash)
+		ctx = context.WithValue(ctx, sessionKey, sess)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

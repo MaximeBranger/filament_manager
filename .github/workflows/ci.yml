@@ -44,6 +44,12 @@ jobs:
       - name: Tests
         run: go test -race ./...
 
+      # Vulnérabilités connues de la stdlib et des dépendances, limitées au code réellement
+      # appelé (bloquant). Lancé avec le Go installé ci-dessus (directive toolchain de go.mod) :
+      # c'est bien la stdlib livrée qui est analysée.
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
   docker:
     name: Docker — FilamentManager
     runs-on: ubuntu-latest
