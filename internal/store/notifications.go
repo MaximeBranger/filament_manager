@@ -26,6 +26,7 @@ type NotificationPayload struct {
 	Offer        bool   `json:"offer,omitempty"` // la transaction était une proposition du propriétaire
 	Count        int    `json:"count,omitempty"`
 	Label        string `json:"label,omitempty"`
+	Title        string `json:"title,omitempty"` // titre d'un partage de modèle 3D
 }
 
 type Notification struct {

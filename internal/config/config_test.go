@@ -82,6 +82,27 @@ func TestTrustedProxies(t *testing.T) {
 	}
 }
 
+func TestShareSettings(t *testing.T) {
+	c, err := Load(env(validEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ShareDir != "/data/shares" || c.ShareMaxFileSize != 50<<20 || c.ShareMaxActive != 5 {
+		t.Errorf("valeurs par défaut : %s %d %d", c.ShareDir, c.ShareMaxFileSize, c.ShareMaxActive)
+	}
+	e := validEnv()
+	e["SHARE_MAX_FILE_SIZE"] = "nope"
+	e["SHARE_MAX_ACTIVE"] = "0"
+	if _, err := Load(env(e)); err == nil || !strings.Contains(err.Error(), "SHARE_MAX_FILE_SIZE") || !strings.Contains(err.Error(), "SHARE_MAX_ACTIVE") {
+		t.Errorf("erreurs attendues : %v", err)
+	}
+	for in, want := range map[string]int64{"2048": 2048, "512KB": 512 << 10, "50MB": 50 << 20, "1 gb": 1 << 30} {
+		if got, err := ParseSize(in); err != nil || got != want {
+			t.Errorf("ParseSize(%q) = %d, %v", in, got, err)
+		}
+	}
+}
+
 func TestParseRate(t *testing.T) {
 	r, err := ParseRate("5/1h")
 	if err != nil || r.Count != 5 || r.Window != time.Hour {

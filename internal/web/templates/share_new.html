@@ -1,0 +1,19 @@
+{{define "content"}}
+<h1>Nouveau partage</h1>
+<form method="post" action="/shares" enctype="multipart/form-data" class="card">
+  {{with .Error}}<p class="field-error" role="alert">{{.}}</p>{{end}}
+  <div class="grid">
+    <label class="full">Fichier STL (maximum {{.MaxSizeMB}} Mo, 1 million de triangles)
+      <input type="file" name="file" accept=".stl,model/stl,application/sla" required>
+    </label>
+    <label>Titre (par défaut : nom du fichier)
+      <input name="title" value="{{.ShareTitle}}" maxlength="100">
+    </label>
+    <label>Mot de passe (facultatif, 6 caractères minimum)
+      <input type="password" name="password" minlength="6" maxlength="200" autocomplete="new-password">
+    </label>
+  </div>
+  <p class="notice small">Le destinataire peut techniquement récupérer le modèle 3D. Le partage dure 7 jours, puis tout est supprimé ; il ne peut pas être prolongé.</p>
+  <div class="actions"><a class="btn" href="/shares">Annuler</a><button class="btn primary">Créer le partage</button></div>
+</form>
+{{end}}

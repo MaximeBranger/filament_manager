@@ -57,6 +57,10 @@ func notificationText(n store.Notification) (text, link string) {
 		return p.Actor + " a enregistré le retour de " + what(p) + ".", "/transfers"
 	case store.NotifLoanConvertedGift:
 		return p.Actor + " vous donne définitivement " + what(p) + ".", "/stock"
+	case store.NotifShareChoice:
+		return p.Actor + " a choisi « " + p.Label + " » pour « " + p.Title + " ».", "/shares"
+	case store.NotifShareLocked:
+		return "Le partage « " + p.Title + " » est verrouillé après trop de mots de passe erronés : définissez-en un nouveau pour le rouvrir.", "/shares"
 	}
 	return "Nouvelle activité.", "/notifications"
 }

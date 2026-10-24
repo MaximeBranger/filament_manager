@@ -54,9 +54,12 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
 			return
 		}
+		// Les chemins d'invitation et de partage contiennent un jeton secret.
 		path := r.URL.Path
 		if strings.HasPrefix(path, "/invite/") {
-			path = "/invite/…" // le chemin contient le jeton d'invitation
+			path = "/invite/…"
+		} else if strings.HasPrefix(path, "/share/") {
+			path = "/share/…"
 		}
 		s.log.Info("http", "method", r.Method, "path", path, "status", sw.status,
 			"duration_ms", time.Since(start).Milliseconds())

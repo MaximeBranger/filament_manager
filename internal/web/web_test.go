@@ -24,10 +24,12 @@ import (
 )
 
 type testApp struct {
-	t     *testing.T
-	srv   *httptest.Server
-	mail  *mail.Fake
-	store *store.Store
+	t      *testing.T
+	srv    *httptest.Server
+	mail   *mail.Fake
+	store  *store.Store
+	server *Server
+	cfg    *config.Config
 }
 
 func newTestApp(t *testing.T) *testApp {
@@ -37,12 +39,16 @@ func newTestApp(t *testing.T) *testApp {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { conn.Close() })
+	shareDir := t.TempDir()
 	cfg, err := config.Load(func(k string) string {
 		return map[string]string{
-			"BASE_URL":       "http://filaments.test",
-			"SESSION_SECRET": strings.Repeat("s", 32),
-			"SMTP_HOST":      "smtp.test",
-			"SMTP_FROM":      "FilamentManager <noreply@filaments.test>",
+			"BASE_URL":            "http://filaments.test",
+			"SESSION_SECRET":      strings.Repeat("s", 32),
+			"SMTP_HOST":           "smtp.test",
+			"SMTP_FROM":           "FilamentManager <noreply@filaments.test>",
+			"SHARE_DIR":           shareDir,
+			"SHARE_MAX_FILE_SIZE": "4KB",
+			"TRUSTED_PROXIES":     "127.0.0.1", // permet de simuler plusieurs IP via X-Forwarded-For
 		}[k]
 	})
 	if err != nil {
@@ -57,7 +63,7 @@ func newTestApp(t *testing.T) *testApp {
 	s.syncMail = true
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
-	return &testApp{t: t, srv: srv, mail: fake, store: st}
+	return &testApp{t: t, srv: srv, mail: fake, store: st, server: s, cfg: cfg}
 }
 
 type client struct {

@@ -90,6 +90,7 @@ func run() error {
 	}
 
 	go srv.PurgeLoop(ctx)
+	go srv.SharePurgeLoop(ctx)
 	if cfg.BackupDir != "" {
 		runner := &backup.Runner{Dir: cfg.BackupDir, Interval: cfg.BackupInterval, Retention: cfg.BackupRetention, DB: st, Log: log}
 		go runner.Run(ctx)

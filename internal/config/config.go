@@ -45,6 +45,10 @@ type Config struct {
 	PlausibleDomain string
 
 	LogLevel string
+
+	ShareDir         string
+	ShareMaxFileSize int64
+	ShareMaxActive   int
 }
 
 // SecureCookies indique si les cookies doivent porter l'attribut Secure.
@@ -110,6 +114,21 @@ func Load(getenv func(string) string) (*Config, error) {
 	case "debug", "info", "warn", "error":
 	default:
 		p.fail("LOG_LEVEL", "valeurs possibles : debug, info, warn, error")
+	}
+
+	c.ShareDir = p.str("SHARE_DIR", "/data/shares")
+	c.ShareMaxFileSize = 50 << 20
+	if raw := p.str("SHARE_MAX_FILE_SIZE", ""); raw != "" {
+		size, err := ParseSize(raw)
+		if err != nil || size < 1024 {
+			p.fail("SHARE_MAX_FILE_SIZE", "taille invalide (ex. 50MB)")
+		} else {
+			c.ShareMaxFileSize = size
+		}
+	}
+	c.ShareMaxActive = p.integer("SHARE_MAX_ACTIVE", 5)
+	if c.ShareMaxActive < 1 {
+		p.fail("SHARE_MAX_ACTIVE", "doit être ≥ 1")
 	}
 
 	if len(p.errs) > 0 {
@@ -205,6 +224,26 @@ func (p *parser) prefixes(key string) []netip.Prefix {
 		out = append(out, pref.Masked())
 	}
 	return out
+}
+
+// ParseSize lit une taille en octets : "52428800", "512KB", "50MB", "1GB" (multiples de 1024).
+func ParseSize(s string) (int64, error) {
+	s = strings.ToUpper(strings.TrimSpace(s))
+	mult := int64(1)
+	for _, u := range []struct {
+		suffix string
+		mult   int64
+	}{{"GB", 1 << 30}, {"MB", 1 << 20}, {"KB", 1 << 10}, {"B", 1}} {
+		if strings.HasSuffix(s, u.suffix) {
+			s, mult = strings.TrimSpace(strings.TrimSuffix(s, u.suffix)), u.mult
+			break
+		}
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || n <= 0 {
+		return 0, errors.New("taille invalide")
+	}
+	return n * mult, nil
 }
 
 // ParseRate lit une limite au format "N/durée", par exemple "3/15m".

@@ -61,7 +61,10 @@ var funcs = template.FuncMap{
 		}
 		return catalog.FinishLabel(p.Finish)
 	},
-	"hex":      stock.EffectiveHex,
+	"hex": stock.EffectiveHex,
+	"mm": func(v float64) string {
+		return strings.Replace(strconv.FormatFloat(v, 'f', 1, 64), ".", ",", 1)
+	},
 	"diameter": formatDiameter,
 	"weight":   formatWeight,
 	"price": func(p *int64) string {

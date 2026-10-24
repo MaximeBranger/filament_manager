@@ -1,0 +1,58 @@
+{{define "content"}}
+<div class="share-head">
+  {{if .Preview}}<p class="notice small">Aperçu : c'est ce que verra votre destinataire. <a href="/shares">Retour aux partages</a></p>{{end}}
+  <h1>{{.Share.OwnerName}} vous propose « {{.Share.Title}} »</h1>
+  <p class="muted">{{mm .Share.File.SizeX}} × {{mm .Share.File.SizeY}} × {{mm .Share.File.SizeZ}} mm · disponible jusqu'au {{date .Share.ExpiresAt}}</p>
+</div>
+
+<div id="viewer" class="viewer" data-mesh="{{.MeshURL}}">
+  <canvas aria-label="Aperçu 3D du modèle"></canvas>
+  <p class="viewer-status" role="status">Chargement du modèle…</p>
+</div>
+<div class="viewer-tools">
+  <button type="button" class="btn small" id="bg-toggle">Fond sombre</button>
+  <label class="check" id="glow-wrap" hidden><input type="checkbox" id="glow-toggle"> Vue dans le noir</label>
+  <span class="small muted">Faites tourner le modèle à la souris ou au doigt.</span>
+</div>
+<p class="small muted">Les couleurs et finitions affichées sont indicatives et peuvent différer du rendu réel.</p>
+<p class="small notice" id="finish-note" hidden>Rendu non représentatif pour cette finition : seule la couleur de base est affichée.</p>
+
+<h2>Couleurs disponibles</h2>
+{{if .Swatches}}
+<form method="post" action="{{.ChoiceAction}}" class="card">
+  <div class="swatches" role="radiogroup" aria-label="Couleurs">
+    {{range .Swatches}}
+    <label class="swatch-option">
+      <input type="radio" name="product_id" value="{{.ID}}" required{{if eq .ID $.Selected}} checked{{end}}
+             data-hex="{{.Hex}}" data-finish="{{.FinishCode}}" data-family="{{.Family}}"{{if .Unrealistic}} data-unrealistic="1"{{end}}>
+      <span class="swatch lg" style="background: {{.Hex}}"></span>
+      <span class="swatch-text">
+        <strong>{{.ColorName}}</strong>
+        <span class="muted small">{{.Brand}} · {{.Material}} · {{.Finish}}</span>
+      </span>
+    </label>
+    {{end}}
+  </div>
+  {{if .Preview}}
+  <p class="small muted">Le formulaire de choix est désactivé dans l'aperçu.</p>
+  {{else}}
+  {{with .Share.Choice}}<p class="small">Votre choix actuel : <strong>{{.Label}}</strong>. Vous pouvez le modifier jusqu'à l'expiration du partage.</p>{{end}}
+  <div class="grid">
+    <label>Votre prénom (facultatif)
+      <input name="recipient_name" maxlength="50" autocomplete="given-name" value="{{with .Share.Choice}}{{.RecipientName}}{{end}}">
+    </label>
+    <label class="full">Message (facultatif)
+      <textarea name="message" rows="2" maxlength="500"></textarea>
+    </label>
+  </div>
+  <div class="actions"><button class="btn primary">Je choisis cette couleur</button></div>
+  {{end}}
+</form>
+{{else}}
+<p class="empty-state">Aucune couleur n'est disponible pour le moment.</p>
+{{end}}
+{{end}}
+
+{{define "scripts"}}
+<script type="module" src="/static/viewer.js?v={{.Version}}"></script>
+{{end}}

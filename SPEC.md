@@ -449,7 +449,7 @@ Calculées **en direct à chaque affichage** à partir du stock du créateur :
 
 ### 9.4 Vue destinataire (`/share/<token>`)
 - En-tête : « *Nom d'affichage* vous propose *Titre* », dimensions du modèle (mm), date d'expiration.
-- Aperçu 3D (**Three.js** servi localement, comme zxing / htmx) : rotation / zoom à la souris et au doigt, fond clair / sombre, clic sur une pastille = application de la couleur.
+- Aperçu 3D (**Three.js** servi localement, comme zxing / htmx) : rotation / zoom à la souris et au doigt, fond clair / sombre, clic sur une pastille = application de la couleur. Normales « crantées » (`toCreasedNormals`, 30°) : surfaces courbes lissées, arêtes vives conservées. Modules ES importés par chemins relatifs (pas d'import map, qui serait un script inline bloqué par la CSP).
 - Avertissement permanent : « Les couleurs et finitions affichées sont indicatives et peuvent différer du rendu réel. »
 - Rendu des finitions (paramètres de `MeshPhysicalMaterial`, aucune texture) :
 
@@ -459,7 +459,7 @@ Calculées **en direct à chaque affichage** à partir du stock du créateur :
 | `matte` | très mat |
 | `glossy` | brillant + vernis (clearcoat) |
 | `silk` | brillant légèrement métallique |
-| `glitter` | brillant + paillettes simulées (bruit léger) |
+| `glitter` | brillant + paillettes simulées (bruit léger : variation aléatoire de luminosité par triangle, en couleurs de sommets, le maillage n'ayant pas d'UV) |
 | `glow` | interrupteur « vue dans le noir » (émissif, scène sombre) |
 | famille `transparent` | translucide |
 | `marble`, `wood`, `carbon`, `multicolor`, `OTHER` | couleur de base + mention « rendu non représentatif » |
@@ -489,6 +489,7 @@ Calculées **en direct à chaque affichage** à partir du stock du créateur :
 | GET | `/shares`, `/shares/new` | connecté |
 | POST | `/shares` (multipart) | connecté |
 | POST | `/shares/{id}/password`, `/shares/{id}/revoke` | connecté, propriétaire |
+| GET | `/shares/{id}/preview`, `/shares/{id}/file` | connecté, propriétaire (aperçu : le lien public n'est plus connu après sa création) |
 | GET | `/share/{token}` | public (+ cookie si mot de passe) |
 | POST | `/share/{token}/unlock` | public |
 | GET | `/share/{token}/files/{fileID}` | public (+ cookie si mot de passe) |

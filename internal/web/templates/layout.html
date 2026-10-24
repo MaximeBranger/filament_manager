@@ -10,7 +10,10 @@
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <script src="/static/vendor/htmx.min.js?v={{.Version}}" defer></script>
 <script src="/static/app.js?v={{.Version}}" defer></script>
-{{if .PlausibleURL}}<script defer data-domain="{{.PlausibleDomain}}" src="{{.PlausibleURL}}/js/script.js"></script>{{end}}
+{{if .PlausibleURL}}{{if .ShareTracking}}
+<script defer data-domain="{{.PlausibleDomain}}" src="{{.PlausibleURL}}/js/script.manual.js"></script>
+<script defer src="/static/plausible-share.js?v={{.Version}}"></script>
+{{else}}<script defer data-domain="{{.PlausibleDomain}}" src="{{.PlausibleURL}}/js/script.js"></script>{{end}}{{end}}
 </head>
 <body>
 <header class="topbar">
@@ -22,6 +25,7 @@
     <a href="/reception"{{if eq .Path "/reception"}} aria-current="page"{{end}}>Réception</a>
     <a href="/friends"{{if eq .Path "/friends"}} aria-current="page"{{end}}>Amis</a>
     <a href="/transfers"{{if eq .Path "/transfers"}} aria-current="page"{{end}}>Prêts</a>
+    <a href="/shares"{{if eq .Path "/shares"}} aria-current="page"{{end}}>Partages</a>
     <a href="/products"{{if eq .Path "/products"}} aria-current="page"{{end}}>Produits</a>
     <a href="/account"{{if eq .Path "/account"}} aria-current="page"{{end}}>Compte</a>
     <a href="/notifications" class="bell"{{if eq .Path "/notifications"}} aria-current="page"{{end}} aria-label="Notifications{{with .Unread}}, {{.}} non lue(s){{end}}">

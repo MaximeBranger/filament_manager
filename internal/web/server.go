@@ -28,8 +28,11 @@ type Server struct {
 	pages     map[string]*pageTemplate
 	emailRate *auth.RateLimiter
 	ipRate    *auth.RateLimiter
-	csp       string
-	syncMail  bool // envoi synchrone des emails de notification (tests)
+	// Limites des pages publiques de partage, par IP et par partage.
+	unlockRate *auth.RateLimiter
+	choiceRate *auth.RateLimiter
+	csp        string
+	syncMail   bool // envoi synchrone des emails de notification (tests)
 }
 
 func New(cfg *config.Config, st *store.Store, mailer mail.Mailer, log *slog.Logger, version string) (*Server, error) {
@@ -41,6 +44,9 @@ func New(cfg *config.Config, st *store.Store, mailer mail.Mailer, log *slog.Logg
 		version:   version,
 		emailRate: auth.NewRateLimiter(cfg.RateLimitEmail.Count, cfg.RateLimitEmail.Window),
 		ipRate:    auth.NewRateLimiter(cfg.RateLimitIP.Count, cfg.RateLimitIP.Window),
+
+		unlockRate: auth.NewRateLimiter(5, 15*time.Minute),
+		choiceRate: auth.NewRateLimiter(10, 15*time.Minute),
 	}
 	pages, err := parseTemplates()
 	if err != nil {
@@ -123,6 +129,17 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /transfers/{id}/cancel", user(s.transferCancel))
 	mux.Handle("POST /loans/{id}/return", user(s.loanReturn))
 	mux.Handle("POST /loans/{id}/gift", user(s.loanGift))
+	mux.Handle("GET /shares", user(s.sharesPage))
+	mux.Handle("GET /shares/new", user(s.shareNew))
+	mux.Handle("POST /shares", user(s.shareCreate))
+	mux.Handle("POST /shares/{id}/password", user(s.sharePassword))
+	mux.Handle("POST /shares/{id}/revoke", user(s.shareRevoke))
+	mux.Handle("GET /shares/{id}/preview", user(s.sharePreview))
+	mux.Handle("GET /shares/{id}/file", user(s.shareOwnerFile))
+	mux.Handle("GET /share/{token}", publicShare(s.sharePage))
+	mux.Handle("POST /share/{token}/unlock", publicShare(s.shareUnlock))
+	mux.Handle("GET /share/{token}/files/{fileID}", publicShare(s.shareFile))
+	mux.Handle("POST /share/{token}/choice", publicShare(s.shareChoice))
 	mux.Handle("GET /notifications", user(s.notificationsPage))
 	mux.Handle("POST /account/notifications", user(s.accountNotifications))
 	mux.Handle("GET /account", user(s.accountPage))

@@ -96,6 +96,28 @@ func (s *Server) exportJSON(w http.ResponseWriter, r *http.Request) {
 	}
 	out["products"], out["spools"] = ps, ss
 
+	// Partages actifs : métadonnées et choix reçus, jamais les modèles 3D.
+	shares, err := s.store.ListShares(r.Context(), user.ID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	shs := make([]map[string]any, 0, len(shares))
+	for _, sh := range shares {
+		e := map[string]any{
+			"title": sh.Title, "file_name": sh.File.OriginalName, "triangles": sh.File.Triangles,
+			"size_mm":    []float64{sh.File.SizeX, sh.File.SizeY, sh.File.SizeZ},
+			"created_at": sh.CreatedAt.Format(time.RFC3339), "expires_at": sh.ExpiresAt.Format(time.RFC3339),
+			"has_password": sh.HasPassword(),
+		}
+		if c := sh.Choice; c != nil {
+			e["choice"] = map[string]any{"color": c.Label, "hex": c.ColorHex, "recipient_name": c.RecipientName,
+				"message": c.Message, "updated_at": c.UpdatedAt.Format(time.RFC3339)}
+		}
+		shs = append(shs, e)
+	}
+	out["shares"] = shs
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+exportFilename("json")+`"`)
 	enc := json.NewEncoder(w)
@@ -151,6 +173,11 @@ func (s *Server) accountDelete(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	shareKeys, err := s.store.ShareStorageKeys(r.Context(), user.ID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	switch err := s.store.DeleteUser(r.Context(), user.ID); {
 	case errors.Is(err, store.ErrActiveLoan):
 		s.render(w, r, http.StatusConflict, "account", map[string]any{
@@ -161,6 +188,7 @@ func (s *Server) accountDelete(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	s.removeShareFiles(shareKeys)
 	s.log.Info("compte supprimé", "user_id", user.ID)
 	s.clearCookie(w, sessionCookie)
 	s.setFlash(w, "Votre compte et toutes vos données ont été supprimés.")
