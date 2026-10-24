@@ -1,0 +1,56 @@
+{{define "content"}}
+<h1>Mes amis</h1>
+<p class="muted">Vos amis voient vos bobines (sauf les vides et celles que vous masquez), sans vos dates d'achat, prix ni notes. Vous voyez les leurs, et vous pouvez vous prêter ou vous donner des bobines.</p>
+
+{{with .NewLink}}
+<div class="card highlight">
+  <h2>Lien d'invitation</h2>
+  <p class="small">Envoyez ce lien à votre ami. Il est valable 7 jours et ne sert qu'une fois. <strong>Il ne sera plus affiché</strong> : copiez-le maintenant.</p>
+  <div class="inline-form">
+    <input id="invite-link" value="{{.}}" readonly aria-label="Lien d'invitation">
+    <button type="button" class="btn primary" data-copy="invite-link">Copier</button>
+  </div>
+</div>
+{{end}}
+
+<div class="card">
+  <h2>Amis</h2>
+  {{if .Friends}}
+  <ul class="spools">
+    {{range .Friends}}
+    <li class="spool">
+      <div class="spool-main">
+        <strong>{{.DisplayName}}</strong>
+        <span class="muted small">Ami depuis le {{date .Since}}</span>
+      </div>
+      <a class="btn small" href="/stock?scope={{.ID}}">Voir son stock</a>
+      <form method="post" action="/friends/{{.ID}}/remove" data-confirm="Retirer {{.DisplayName}} de vos amis ? Vous ne verrez plus vos stocks respectifs.">
+        <button class="btn small" aria-label="Retirer {{.DisplayName}}">Retirer</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="muted">Vous n'avez pas encore d'ami. Créez un lien d'invitation et envoyez-le.</p>
+  {{end}}
+</div>
+
+<div class="card">
+  <h2>Invitations</h2>
+  <form method="post" action="/friends/invitations">
+    <button class="btn primary">Créer un lien d'invitation</button>
+  </form>
+  {{if .Invitations}}
+  <ul class="plain-list">
+    {{range .Invitations}}
+    <li>
+      <span>Créée le {{date .CreatedAt}}, expire le {{date .ExpiresAt}}</span>
+      <form method="post" action="/friends/invitations/{{.ID}}/revoke" class="inline">
+        <button class="btn small">Révoquer</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{end}}
+</div>
+{{end}}

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/MaximeBranger/filament_manager/internal/auth"
@@ -53,7 +54,11 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
 			return
 		}
-		s.log.Info("http", "method", r.Method, "path", r.URL.Path, "status", sw.status,
+		path := r.URL.Path
+		if strings.HasPrefix(path, "/invite/") {
+			path = "/invite/…" // le chemin contient le jeton d'invitation
+		}
+		s.log.Info("http", "method", r.Method, "path", path, "status", sw.status,
 			"duration_ms", time.Since(start).Milliseconds())
 	})
 }

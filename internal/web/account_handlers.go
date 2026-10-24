@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/MaximeBranger/filament_manager/internal/catalog"
 	"github.com/MaximeBranger/filament_manager/internal/stock"
+	"github.com/MaximeBranger/filament_manager/internal/store"
 )
 
 func (s *Server) accountPage(w http.ResponseWriter, r *http.Request) {
@@ -149,7 +151,13 @@ func (s *Server) accountDelete(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if err := s.store.DeleteUser(r.Context(), user.ID); err != nil {
+	switch err := s.store.DeleteUser(r.Context(), user.ID); {
+	case errors.Is(err, store.ErrActiveLoan):
+		s.render(w, r, http.StatusConflict, "account", map[string]any{
+			"Title": "Mon compte", "DeleteError": "Un prêt est en cours (prêté ou emprunté) : clôturez-le avant de supprimer votre compte.",
+		})
+		return
+	case err != nil:
 		s.serverError(w, r, err)
 		return
 	}

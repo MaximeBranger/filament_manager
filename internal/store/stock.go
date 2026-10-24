@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 var (
 	ErrDuplicateEAN = errors.New("un produit avec ce code-barre existe déjà")
 	ErrProductInUse = errors.New("le produit a encore des bobines")
+	ErrSpoolLent    = errors.New("la bobine est en prêt")
 )
 
 // ProductFields sont les champs saisissables d'un produit.
@@ -50,6 +52,26 @@ type SpoolFields struct {
 	Hidden       bool
 }
 
+// Label renvoie un libellé lisible du produit, ex. "eSun PLA+ Galaxy Black · 1 kg".
+func (p ProductFields) Label() string {
+	material := catalog.MaterialLabel(p.Material)
+	if p.Material == catalog.Other && p.MaterialOther != "" {
+		material = p.MaterialOther
+	}
+	weight := strconv.Itoa(p.NominalWeightG) + " g"
+	if p.NominalWeightG >= 1000 && p.NominalWeightG%100 == 0 {
+		weight = strings.Replace(strconv.FormatFloat(float64(p.NominalWeightG)/1000, 'f', -1, 64), ".", ",", 1) + " kg"
+	}
+	return p.Brand + " " + material + " " + p.ColorName + " · " + weight
+}
+
+// ActiveLoan décrit le prêt en cours d'une bobine.
+type ActiveLoan struct {
+	ID           int64
+	BorrowerID   int64
+	BorrowerName string
+}
+
 type Spool struct {
 	ID        int64
 	UserID    int64
@@ -58,6 +80,13 @@ type Spool struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	Product   Product
+	OwnerName string
+	Loan      *ActiveLoan // nil si la bobine n'est pas prêtée
+}
+
+// StripPrivate efface les champs que seul le propriétaire peut voir.
+func (sp *Spool) StripPrivate() {
+	sp.PurchaseDate, sp.PriceCents, sp.Supplier, sp.Notes = "", nil, "", ""
 }
 
 const productCols = `p.id, p.user_id, p.brand, p.material, p.material_other, p.color_name, p.color_family,
@@ -76,6 +105,48 @@ func spoolDest(sp *Spool) []any {
 	return []any{&sp.ID, &sp.UserID, &sp.ProductID, &sp.Level, str{&sp.PurchaseDate}, &sp.PriceCents,
 		str{&sp.Supplier}, str{&sp.Notes}, &sp.Hidden, ts{&sp.CreatedAt}, ts{&sp.UpdatedAt}}
 }
+
+// spoolSelect lit une bobine avec son produit, son propriétaire et son éventuel prêt en cours.
+const spoolSelect = `SELECT ` + spoolCols + `, ` + productCols + `, ou.display_name, l.id, l.borrower_id, bu.display_name
+	FROM spools s
+	JOIN products p ON p.id = s.product_id
+	JOIN users ou ON ou.id = s.user_id
+	LEFT JOIN loans l ON l.spool_id = s.id AND l.ended_at IS NULL
+	LEFT JOIN users bu ON bu.id = l.borrower_id`
+
+func scanSpool(row interface{ Scan(...any) error }) (Spool, error) {
+	var sp Spool
+	var loanID, borrowerID sql.NullInt64
+	var borrowerName sql.NullString
+	dest := append(spoolDest(&sp), productDest(&sp.Product)...)
+	dest = append(dest, &sp.OwnerName, &loanID, &borrowerID, &borrowerName)
+	if err := row.Scan(dest...); err != nil {
+		return sp, notFound(err)
+	}
+	if loanID.Valid {
+		sp.Loan = &ActiveLoan{ID: loanID.Int64, BorrowerID: borrowerID.Int64, BorrowerName: borrowerName.String}
+	}
+	return sp, nil
+}
+
+func (s *Store) listSpools(ctx context.Context, where string, args ...any) ([]Spool, error) {
+	rows, err := s.DB.QueryContext(ctx, spoolSelect+` WHERE `+where+` ORDER BY s.id`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Spool
+	for rows.Next() {
+		sp, err := scanSpool(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, sp)
+	}
+	return out, rows.Err()
+}
+
+const activeLoanExists = `EXISTS (SELECT 1 FROM loans WHERE spool_id = spools.id AND ended_at IS NULL)`
 
 func isDuplicateEAN(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed: products.user_id, products.ean")
@@ -324,41 +395,24 @@ func (s *Store) Receive(ctx context.Context, userID int64, items []ReceptionItem
 }
 
 func (s *Store) SpoolByID(ctx context.Context, userID, id int64) (*Spool, error) {
-	sp := &Spool{}
-	err := s.DB.QueryRowContext(ctx, `SELECT `+spoolCols+`, `+productCols+`
-		FROM spools s JOIN products p ON p.id = s.product_id
-		WHERE s.id = ? AND s.user_id = ?`, id, userID).
-		Scan(append(spoolDest(sp), productDest(&sp.Product)...)...)
+	sp, err := scanSpool(s.DB.QueryRowContext(ctx, spoolSelect+` WHERE s.id = ? AND s.user_id = ?`, id, userID))
 	if err != nil {
-		return nil, notFound(err)
+		return nil, err
 	}
-	return sp, nil
+	return &sp, nil
 }
 
 // ListSpools renvoie toutes les bobines de l'utilisateur avec leur produit. Le filtrage et le
 // tri sont faits en mémoire (package stock) : les volumes restent faibles.
 func (s *Store) ListSpools(ctx context.Context, userID int64) ([]Spool, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT `+spoolCols+`, `+productCols+`
-		FROM spools s JOIN products p ON p.id = s.product_id
-		WHERE s.user_id = ? ORDER BY s.id`, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Spool
-	for rows.Next() {
-		var sp Spool
-		if err := rows.Scan(append(spoolDest(&sp), productDest(&sp.Product)...)...); err != nil {
-			return nil, err
-		}
-		out = append(out, sp)
-	}
-	return out, rows.Err()
+	return s.listSpools(ctx, `s.user_id = ?`, userID)
 }
 
+// UpdateSpool enregistre les champs d'une bobine. Pendant un prêt, le niveau est figé.
 func (s *Store) UpdateSpool(ctx context.Context, userID, id int64, f SpoolFields) error {
-	res, err := s.DB.ExecContext(ctx, `UPDATE spools SET level = ?, purchase_date = ?, price_cents = ?, supplier = ?,
-		notes = ?, hidden_from_friends = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+	res, err := s.DB.ExecContext(ctx, `UPDATE spools SET level = CASE WHEN `+activeLoanExists+` THEN level ELSE ? END,
+		purchase_date = ?, price_cents = ?, supplier = ?, notes = ?, hidden_from_friends = ?, updated_at = ?
+		WHERE id = ? AND user_id = ?`,
 		f.Level, nullable(f.PurchaseDate), f.PriceCents, nullable(f.Supplier), nullable(f.Notes), f.Hidden,
 		s.now(), id, userID)
 	if err != nil {
@@ -370,25 +424,37 @@ func (s *Store) UpdateSpool(ctx context.Context, userID, id int64, f SpoolFields
 	return nil
 }
 
+// lentOrMissing distingue, après une mise à jour sans effet, une bobine prêtée d'une bobine absente.
+func (s *Store) lentOrMissing(ctx context.Context, userID, id int64) error {
+	sp, err := s.SpoolByID(ctx, userID, id)
+	if err != nil {
+		return err
+	}
+	if sp.Loan != nil {
+		return ErrSpoolLent
+	}
+	return ErrNotFound
+}
+
 func (s *Store) SetSpoolLevel(ctx context.Context, userID, id int64, level string) error {
-	res, err := s.DB.ExecContext(ctx, `UPDATE spools SET level = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
-		level, s.now(), id, userID)
+	res, err := s.DB.ExecContext(ctx, `UPDATE spools SET level = ?, updated_at = ?
+		WHERE id = ? AND user_id = ? AND NOT `+activeLoanExists, level, s.now(), id, userID)
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound
+		return s.lentOrMissing(ctx, userID, id)
 	}
 	return nil
 }
 
 func (s *Store) DeleteSpool(ctx context.Context, userID, id int64) error {
-	res, err := s.DB.ExecContext(ctx, `DELETE FROM spools WHERE id = ? AND user_id = ?`, id, userID)
+	res, err := s.DB.ExecContext(ctx, `DELETE FROM spools WHERE id = ? AND user_id = ? AND NOT `+activeLoanExists, id, userID)
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound
+		return s.lentOrMissing(ctx, userID, id)
 	}
 	return nil
 }

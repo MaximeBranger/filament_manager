@@ -2,6 +2,7 @@
 <h1>Bobine</h1>
 <div class="card">
   {{template "product_summary" .Spool.Product}}
+  {{with .Spool.Loan}}<p class="notice">Prêtée à <strong>{{.BorrowerName}}</strong> : le niveau est figé jusqu'au retour. <a href="/transfers">Gérer le prêt</a></p>{{end}}
   <p class="small"><a href="/products/{{.Spool.Product.ID}}">Modifier le produit</a> · <a href="/spools/new?product_id={{.Spool.Product.ID}}">Ajouter une bobine identique</a></p>
 </div>
 
@@ -10,8 +11,34 @@
   <div class="actions"><a class="btn" href="/stock">Annuler</a><button class="btn primary">Enregistrer</button></div>
 </form>
 
+{{if and .Friends (not .Spool.Loan)}}
+<form method="post" action="/transfers" class="card">
+  <h2>Prêter ou donner</h2>
+  <input type="hidden" name="spool" value="{{.Spool.ID}}">
+  <div class="grid">
+    <label>À
+      <select name="to">{{range .Friends}}<option value="{{.ID}}">{{.DisplayName}}</option>{{end}}</select>
+    </label>
+    <label>Niveau actuel (pour un don)
+      {{$cur := .Spool.Level}}
+      <select name="level_{{.Spool.ID}}">{{range levels}}<option value="{{.Code}}"{{if eq .Code $cur}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+    </label>
+    <label class="full">Message (facultatif)
+      <textarea name="message" rows="2" maxlength="1000"></textarea>
+    </label>
+  </div>
+  <p class="small muted">Un prêt prend effet immédiatement. Un don doit être accepté par votre ami.</p>
+  <div class="actions">
+    <button class="btn" name="kind" value="loan">Prêter</button>
+    <button class="btn primary" name="kind" value="gift">Proposer en don</button>
+  </div>
+</form>
+{{end}}
+
+{{if not .Spool.Loan}}
 <form method="post" action="/spools/{{.Spool.ID}}/delete" class="danger-zone" data-confirm="Supprimer définitivement cette bobine ?">
   <p class="small muted">Pour une bobine terminée, préférez le niveau « Vide » : elle reste dans votre historique.</p>
   <button class="btn danger">Supprimer la bobine</button>
 </form>
+{{end}}
 {{end}}

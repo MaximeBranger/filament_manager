@@ -1,0 +1,16 @@
+{{define "content"}}
+<h1>Notifications</h1>
+{{if .Entries}}
+<ul class="history notifications">
+  {{range .Entries}}
+  <li class="{{if .ReadAt.IsZero}}unread{{end}}">
+    <span class="muted small">{{datetime .CreatedAt}}</span>
+    <a href="{{.Link}}">{{.Text}}</a>
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<p class="empty-state">Aucune notification.</p>
+{{end}}
+<p class="small muted">Vous pouvez choisir de recevoir ou non ces notifications par email depuis <a href="/account">votre compte</a>.</p>
+{{end}}

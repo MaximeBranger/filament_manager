@@ -54,6 +54,7 @@ func newTestApp(t *testing.T) *testApp {
 	if err != nil {
 		t.Fatal(err)
 	}
+	s.syncMail = true
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
 	return &testApp{t: t, srv: srv, mail: fake, store: st}

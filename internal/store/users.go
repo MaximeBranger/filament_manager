@@ -52,6 +52,14 @@ func (s *Store) UpdateDisplayName(ctx context.Context, userID int64, name string
 // DeleteUser supprime le compte et, en cascade, toutes ses données.
 func (s *Store) DeleteUser(ctx context.Context, userID int64) error {
 	return s.inTx(ctx, func(tx *sql.Tx) error {
+		var lent int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM loans WHERE ended_at IS NULL AND (lender_id = ? OR borrower_id = ?)`,
+			userID, userID).Scan(&lent); err != nil {
+			return err
+		}
+		if lent > 0 {
+			return ErrActiveLoan
+		}
 		// Les bobines référencent les produits sans cascade : on les supprime d'abord.
 		if _, err := tx.ExecContext(ctx, `DELETE FROM spools WHERE user_id = ?`, userID); err != nil {
 			return err

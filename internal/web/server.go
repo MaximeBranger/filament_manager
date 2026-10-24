@@ -29,6 +29,7 @@ type Server struct {
 	emailRate *auth.RateLimiter
 	ipRate    *auth.RateLimiter
 	csp       string
+	syncMail  bool // envoi synchrone des emails de notification (tests)
 }
 
 func New(cfg *config.Config, st *store.Store, mailer mail.Mailer, log *slog.Logger, version string) (*Server, error) {
@@ -109,6 +110,21 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /reception", user(s.receptionPage))
 	mux.Handle("POST /reception", user(s.receptionSubmit))
 	mux.Handle("GET /api/products/lookup", user(s.productLookup))
+	mux.Handle("GET /friends", user(s.friendsPage))
+	mux.Handle("POST /friends/invitations", user(s.invitationCreate))
+	mux.Handle("POST /friends/invitations/{id}/revoke", user(s.invitationRevoke))
+	mux.Handle("POST /friends/{id}/remove", user(s.friendRemove))
+	mux.Handle("GET /invite/{token}", user(s.invitePage))
+	mux.Handle("POST /invite/{token}", user(s.inviteAccept))
+	mux.Handle("GET /transfers", user(s.transfersPage))
+	mux.Handle("GET /transfers/new", user(s.transferNew))
+	mux.Handle("POST /transfers", user(s.transferCreate))
+	mux.Handle("POST /transfers/{id}/decide", user(s.transferDecide))
+	mux.Handle("POST /transfers/{id}/cancel", user(s.transferCancel))
+	mux.Handle("POST /loans/{id}/return", user(s.loanReturn))
+	mux.Handle("POST /loans/{id}/gift", user(s.loanGift))
+	mux.Handle("GET /notifications", user(s.notificationsPage))
+	mux.Handle("POST /account/notifications", user(s.accountNotifications))
 	mux.Handle("GET /account", user(s.accountPage))
 	mux.Handle("POST /account/name", user(s.accountName))
 	mux.Handle("GET /account/export.json", user(s.exportJSON))

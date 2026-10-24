@@ -29,7 +29,9 @@ type querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-func (s *Store) now() string { return s.Now().UTC().Format(db.TimeFormat) }
+const timeFormat = db.TimeFormat
+
+func (s *Store) now() string { return s.Now().UTC().Format(timeFormat) }
 
 func (s *Store) inTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
 	tx, err := s.DB.BeginTx(ctx, nil)

@@ -34,7 +34,7 @@ go test -race ./...    # comme la CI
 
 ## Configuration
 
-Tout passe par des variables d'environnement. Le tableau complet se trouve dans [SPEC.md §10](SPEC.md#10-configuration-variables-denvironnement). Les variables obligatoires sont `BASE_URL`, `SESSION_SECRET` (au moins 32 caractères), `SMTP_HOST` et `SMTP_FROM`. L'application refuse de démarrer si l'une d'elles manque.
+Tout passe par des variables d'environnement. Le tableau complet se trouve dans [SPEC.md §11](SPEC.md#11-configuration-variables-denvironnement). Les variables obligatoires sont `BASE_URL`, `SESSION_SECRET` (au moins 32 caractères), `SMTP_HOST` et `SMTP_FROM`. L'application refuse de démarrer si l'une d'elles manque.
 
 ## Production
 

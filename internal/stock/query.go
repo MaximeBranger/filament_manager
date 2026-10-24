@@ -33,6 +33,8 @@ var Sorts = []catalog.Option{
 
 // Query décrit une recherche dans le stock. Elle se lit et s'écrit dans l'URL.
 type Query struct {
+	Scope     string // "" : mon stock, "friends" : tous mes amis, sinon id d'un ami
+	Avail     string // "" : toutes, "available" : non prêtées, "lent" : prêtées
 	Text      string
 	Families  []string
 	Materials []string
@@ -49,6 +51,8 @@ type Query struct {
 // ParseQuery lit une recherche depuis les paramètres d'URL.
 func ParseQuery(v url.Values) Query {
 	q := Query{
+		Scope:     v.Get("scope"),
+		Avail:     v.Get("avail"),
 		Text:      strings.TrimSpace(v.Get("q")),
 		Families:  v["fam"],
 		Materials: v["mat"],
@@ -79,12 +83,21 @@ func ParseQuery(v url.Values) Query {
 	if !slices.ContainsFunc(Sorts, func(o catalog.Option) bool { return o.Code == q.Sort }) {
 		q.Sort = "color"
 	}
+	if q.Avail != "available" && q.Avail != "lent" {
+		q.Avail = ""
+	}
 	return q
 }
 
 // Values réécrit la recherche en paramètres d'URL (pour les liens et hx-push-url).
 func (q Query) Values() url.Values {
 	v := url.Values{}
+	if q.Scope != "" {
+		v.Set("scope", q.Scope)
+	}
+	if q.Avail != "" {
+		v.Set("avail", q.Avail)
+	}
 	if q.Text != "" {
 		v.Set("q", q.Text)
 	}
@@ -118,7 +131,7 @@ func (q Query) Values() url.Values {
 // Active indique si au moins un filtre restreint la liste.
 func (q Query) Active() bool {
 	return q.Text != "" || len(q.Families) > 0 || len(q.Materials) > 0 || len(q.Brands) > 0 ||
-		len(q.Finishes) > 0 || len(q.Levels) > 0 || q.Diameter != "" || q.Near != ""
+		len(q.Finishes) > 0 || len(q.Levels) > 0 || q.Diameter != "" || q.Near != "" || q.Avail != ""
 }
 
 // Item est une bobine dans un résultat de recherche.
@@ -129,15 +142,7 @@ type Item struct {
 }
 
 // EffectiveHex renvoie l'hexa du produit, ou celui de sa famille à défaut.
-func EffectiveHex(p store.Product) string {
-	if p.ColorHex != "" {
-		return p.ColorHex
-	}
-	if f, ok := catalog.FamilyByCode(p.ColorFamily); ok {
-		return f.Hex
-	}
-	return "#9e9e9e"
-}
+func EffectiveHex(p store.Product) string { return p.Hex() }
 
 func haystack(sp store.Spool) string {
 	p := sp.Product
@@ -178,6 +183,9 @@ func (q Query) Apply(spools []store.Spool) []Item {
 			continue
 		}
 		if q.Diameter != "" && strconv.FormatFloat(p.DiameterMM, 'f', -1, 64) != q.Diameter {
+			continue
+		}
+		if (q.Avail == "available" && sp.Loan != nil) || (q.Avail == "lent" && sp.Loan == nil) {
 			continue
 		}
 		if len(words) > 0 && !containsAll(haystack(sp), words) {

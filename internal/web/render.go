@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/MaximeBranger/filament_manager/internal/catalog"
 	"github.com/MaximeBranger/filament_manager/internal/stock"
@@ -19,6 +20,16 @@ import (
 )
 
 type pageTemplate struct{ t *template.Template }
+
+// paris est le fuseau d'affichage des dates. Les données tzdata sont embarquées (import ci-dessus) :
+// l'image distroless n'en contient pas.
+var paris = func() *time.Location {
+	loc, err := time.LoadLocation("Europe/Paris")
+	if err != nil {
+		return time.UTC
+	}
+	return loc
+}()
 
 var funcs = template.FuncMap{
 	"levels":     func() []catalog.Option { return catalog.Levels },
@@ -66,8 +77,10 @@ var funcs = template.FuncMap{
 		}
 		return t.Format("02/01/2006")
 	},
-	"val":  func(v url.Values, key string) string { return v.Get(key) },
-	"ferr": func(e stock.Errors, key string) string { return e[key] },
+	"date":     func(t time.Time) string { return t.In(paris).Format("02/01/2006") },
+	"datetime": func(t time.Time) string { return t.In(paris).Format("02/01/2006 à 15h04") },
+	"val":      func(v url.Values, key string) string { return v.Get(key) },
+	"ferr":     func(e stock.Errors, key string) string { return e[key] },
 	"dict": func(kv ...any) map[string]any {
 		m := map[string]any{}
 		for i := 0; i+1 < len(kv); i += 2 {
@@ -140,6 +153,13 @@ func (s *Server) renderBlock(w http.ResponseWriter, r *http.Request, status int,
 	data["Path"] = r.URL.Path
 	if block == "layout" {
 		data["Flash"] = s.takeFlash(w, r)
+		if u := currentUser(r); u != nil {
+			n, err := s.store.UnreadCount(r.Context(), u.ID)
+			if err != nil {
+				s.log.Error("compteur de notifications", "err", err)
+			}
+			data["Unread"] = n
+		}
 	}
 	if s.cfg.PlausibleEnabled() {
 		data["PlausibleURL"] = s.cfg.PlausibleURL

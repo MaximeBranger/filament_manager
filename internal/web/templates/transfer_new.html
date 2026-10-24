@@ -1,0 +1,35 @@
+{{define "content"}}
+<h1>{{.Title}}</h1>
+<form method="post" action="/transfers" class="card">
+  <input type="hidden" name="kind" value="{{.Kind}}">
+  <input type="hidden" name="to" value="{{.OwnerID}}">
+  <p>À <strong>{{.OwnerName}}</strong>, pour :</p>
+  <ul class="spools">
+    {{range .Spools}}
+    <li class="spool">
+      <input type="hidden" name="spool" value="{{.ID}}">
+      <span class="swatch" style="background: {{hex .Product}}"></span>
+      <div class="spool-main">
+        <strong>{{.Product.ColorName}}</strong>
+        <span class="muted">{{.Product.Brand}} · {{materialText .Product}} · {{weight .Product.NominalWeightG}}</span>
+      </div>
+      <span class="level level-{{.Level}}">{{levelLabel .Level}}</span>
+    </li>
+    {{end}}
+  </ul>
+  <div class="grid">
+    {{if eq .Kind "loan"}}
+    <label>Quantité de filament nécessaire (g, facultatif)
+      <input type="number" name="grams" min="1" max="100000" inputmode="numeric" placeholder="ex. 300">
+    </label>
+    {{end}}
+    <label class="full">Message (facultatif)
+      <textarea name="message" rows="3" maxlength="1000" placeholder="ex. Pour imprimer un casque de cosplay"></textarea>
+    </label>
+  </div>
+  <div class="actions">
+    <a class="btn" href="/stock?scope={{.OwnerID}}">Annuler</a>
+    <button class="btn primary">Envoyer la demande</button>
+  </div>
+</form>
+{{end}}

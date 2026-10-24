@@ -1,0 +1,21 @@
+{{define "content"}}
+<div class="narrow">
+  <h1>Invitation</h1>
+  <div class="card">
+    {{if .Self}}
+      <p>C'est votre propre lien d'invitation : envoyez-le à l'ami avec qui vous voulez partager vos stocks.</p>
+      <a class="btn" href="/friends">Retour à mes amis</a>
+    {{else if .Already}}
+      <p>Vous êtes déjà ami avec <strong>{{.Invitation.InviterName}}</strong>.</p>
+      <a class="btn primary" href="/stock?scope={{.Invitation.InviterID}}">Voir son stock</a>
+    {{else}}
+      <p><strong>{{.Invitation.InviterName}}</strong> vous invite à partager vos stocks de filament.</p>
+      <p class="small muted">Vous verrez ses bobines et il verra les vôtres (sans dates d'achat, prix ni notes). Vous pourrez vous prêter et vous donner des bobines. Chacun peut mettre fin à ce partage à tout moment.</p>
+      <form method="post" action="/invite/{{.Token}}" class="actions">
+        <a class="btn" href="/stock">Refuser</a>
+        <button class="btn primary">Accepter</button>
+      </form>
+    {{end}}
+  </div>
+</div>
+{{end}}

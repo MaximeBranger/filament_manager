@@ -1,5 +1,5 @@
 // Commande filamentmanager : démarre le serveur web. Toute la configuration vient des
-// variables d'environnement (voir SPEC.md §10).
+// variables d'environnement (voir SPEC.md §11).
 package main
 
 import (

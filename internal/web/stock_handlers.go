@@ -26,12 +26,41 @@ func today() string { return time.Now().Format("2006-01-02") }
 
 func (s *Server) stockList(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
-	spools, err := s.store.ListSpools(r.Context(), user.ID)
+	q := stock.ParseQuery(r.URL.Query())
+	friends, err := s.store.ListFriends(r.Context(), user.ID)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	q := stock.ParseQuery(r.URL.Query())
+
+	// Périmètre : mon stock, celui d'un ami, ou celui de tous mes amis.
+	var spools []store.Spool
+	var friend *store.Friend
+	title := "Mon stock"
+	switch q.Scope {
+	case "":
+		spools, err = s.store.ListSpools(r.Context(), user.ID)
+	case "friends":
+		title = "Stock de mes amis"
+		spools, err = s.store.ListFriendSpools(r.Context(), user.ID, 0)
+	default:
+		id, _ := strconv.ParseInt(q.Scope, 10, 64)
+		for i := range friends {
+			if friends[i].ID == id {
+				friend = &friends[i]
+			}
+		}
+		if friend == nil {
+			s.notFound(w, r)
+			return
+		}
+		title = "Stock de " + friend.DisplayName
+		spools, err = s.store.ListFriendSpools(r.Context(), user.ID, friend.ID)
+	}
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	items := q.Apply(spools)
 
 	// Facettes : seules les marques présentes dans le stock sont proposées au filtre.
@@ -50,12 +79,15 @@ func (s *Server) stockList(w http.ResponseWriter, r *http.Request) {
 		near = "#1565c0"
 	}
 	data := map[string]any{
-		"Title":  "Mon stock",
-		"Query":  q,
-		"Items":  items,
-		"Total":  len(spools),
-		"Brands": brandOpts,
-		"Near":   near,
+		"Title":   title,
+		"Query":   q,
+		"Items":   items,
+		"Total":   len(spools),
+		"Brands":  brandOpts,
+		"Near":    near,
+		"Friends": friends,
+		"Friend":  friend,
+		"Mine":    q.Scope == "",
 	}
 	if isHTMX(r) && r.Header.Get("HX-Target") == "results" {
 		s.renderBlock(w, r, http.StatusOK, "stock", "results", data)
@@ -72,11 +104,13 @@ func (s *Server) spoolLevel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Requête invalide.", http.StatusBadRequest)
 		return
 	}
-	if err := s.store.SetSpoolLevel(r.Context(), user.ID, id, level); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			s.notFound(w, r)
-			return
-		}
+	switch err := s.store.SetSpoolLevel(r.Context(), user.ID, id, level); {
+	case errors.Is(err, store.ErrNotFound):
+		s.notFound(w, r)
+		return
+	case errors.Is(err, store.ErrSpoolLent):
+		// Niveau figé pendant le prêt : on renvoie la ligne inchangée.
+	case err != nil:
 		s.serverError(w, r, err)
 		return
 	}
@@ -90,7 +124,7 @@ func (s *Server) spoolLevel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.renderBlock(w, r, http.StatusOK, "stock", "spool_row", map[string]any{
-		"Item": stock.Item{Spool: *sp, Hex: stock.EffectiveHex(sp.Product), Distance: -1},
+		"Item": stock.Item{Spool: *sp, Hex: stock.EffectiveHex(sp.Product), Distance: -1}, "Mine": true,
 	})
 }
 
@@ -257,8 +291,17 @@ func (s *Server) spoolEdit(w http.ResponseWriter, r *http.Request) {
 		s.notFound(w, r)
 		return
 	}
-	s.render(w, r, http.StatusOK, "spool_edit", map[string]any{
-		"Title": "Bobine", "Spool": sp, "Form": spoolValues(sp.SpoolFields),
+	s.renderSpoolEdit(w, r, http.StatusOK, sp, spoolValues(sp.SpoolFields), nil)
+}
+
+func (s *Server) renderSpoolEdit(w http.ResponseWriter, r *http.Request, status int, sp *store.Spool, form url.Values, errs stock.Errors) {
+	friends, err := s.store.ListFriends(r.Context(), currentUser(r).ID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.render(w, r, status, "spool_edit", map[string]any{
+		"Title": "Bobine", "Spool": sp, "Form": form, "Errors": errs, "Friends": friends,
 	})
 }
 
@@ -277,9 +320,7 @@ func (s *Server) spoolUpdate(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	fields, errs := stock.ParseSpool(r.PostForm)
 	if errs.Any() {
-		s.render(w, r, http.StatusUnprocessableEntity, "spool_edit", map[string]any{
-			"Title": "Bobine", "Spool": sp, "Form": r.PostForm, "Errors": errs,
-		})
+		s.renderSpoolEdit(w, r, http.StatusUnprocessableEntity, sp, r.PostForm, errs)
 		return
 	}
 	if err := s.store.UpdateSpool(r.Context(), user.ID, id, fields); err != nil {
@@ -297,11 +338,15 @@ func (s *Server) spoolDelete(w http.ResponseWriter, r *http.Request) {
 		s.notFound(w, r)
 		return
 	}
-	if err := s.store.DeleteSpool(r.Context(), user.ID, id); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			s.notFound(w, r)
-			return
-		}
+	switch err := s.store.DeleteSpool(r.Context(), user.ID, id); {
+	case errors.Is(err, store.ErrNotFound):
+		s.notFound(w, r)
+		return
+	case errors.Is(err, store.ErrSpoolLent):
+		s.setFlash(w, "Cette bobine est en prêt : elle ne peut pas être supprimée.")
+		http.Redirect(w, r, "/spools/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+		return
+	case err != nil:
 		s.serverError(w, r, err)
 		return
 	}
@@ -435,14 +480,6 @@ type productJSON struct {
 	Hex   string `json:"hex"`
 }
 
-func productLabel(p store.ProductFields) string {
-	material := catalog.MaterialLabel(p.Material)
-	if p.Material == catalog.Other && p.MaterialOther != "" {
-		material = p.MaterialOther
-	}
-	return p.Brand + " " + material + " " + p.ColorName + " · " + formatWeight(p.NominalWeightG)
-}
-
 func (s *Server) productLookup(w http.ResponseWriter, r *http.Request) {
 	ean := cleanEAN(r.URL.Query().Get("ean"))
 	resp := map[string]any{"found": false}
@@ -453,7 +490,7 @@ func (s *Server) productLookup(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if p != nil {
-			resp = map[string]any{"found": true, "product": productJSON{p.ID, productLabel(p.ProductFields), stock.EffectiveHex(*p)}}
+			resp = map[string]any{"found": true, "product": productJSON{p.ID, p.Label(), stock.EffectiveHex(*p)}}
 		}
 	}
 	writeJSON(w, http.StatusOK, resp)

@@ -1,15 +1,26 @@
 {{define "content"}}
 <div class="toolbar">
-  <h1>Mon stock</h1>
+  <h1>{{.Title}}</h1>
+  {{if .Mine}}
   <div class="actions">
     <a class="btn" href="/scan">Scanner</a>
     <a class="btn primary" href="/spools/new">Ajouter</a>
   </div>
+  {{end}}
 </div>
 
 <form id="filters" class="filters" action="/stock" method="get"
       hx-get="/stock" hx-target="#results" hx-push-url="true"
       hx-trigger="input changed delay:300ms, change, submit">
+  {{if .Friends}}
+  <label class="scope">Afficher
+    <select name="scope" data-autosubmit-always>
+      <option value=""{{if eq .Query.Scope ""}} selected{{end}}>Mon stock</option>
+      <option value="friends"{{if eq .Query.Scope "friends"}} selected{{end}}>Tous mes amis</option>
+      {{range .Friends}}<option value="{{.ID}}"{{if eq (printf "%d" .ID) $.Query.Scope}} selected{{end}}>Stock de {{.DisplayName}}</option>{{end}}
+    </select>
+  </label>
+  {{end}}
   <input type="search" name="q" value="{{.Query.Text}}" placeholder="Rechercher : marque, couleur, matériau…" aria-label="Recherche" autocomplete="off">
 
   <fieldset class="families">
@@ -22,7 +33,7 @@
     {{end}}
   </fieldset>
 
-  <details class="more"{{if or .Query.Materials .Query.Brands .Query.Finishes .Query.Levels .Query.Diameter .Query.Near .Query.ShowEmpty}} open{{end}}>
+  <details class="more"{{if or .Query.Materials .Query.Brands .Query.Finishes .Query.Levels .Query.Diameter .Query.Near .Query.ShowEmpty .Query.Avail}} open{{end}}>
     <summary>Plus de filtres</summary>
     <div class="filter-groups">
       <fieldset>
@@ -52,7 +63,13 @@
       <fieldset>
         <legend>Niveau</legend>
         {{range levels}}<label class="check"><input type="checkbox" name="lvl" value="{{.Code}}"{{if has $.Query.Levels .Code}} checked{{end}}> {{.Label}}</label>{{end}}
-        <label class="check"><input type="checkbox" name="empty" value="1"{{if .Query.ShowEmpty}} checked{{end}}> Afficher les vides</label>
+        {{if .Mine}}<label class="check"><input type="checkbox" name="empty" value="1"{{if .Query.ShowEmpty}} checked{{end}}> Afficher les vides</label>{{end}}
+      </fieldset>
+      <fieldset>
+        <legend>Disponibilité</legend>
+        <label class="check"><input type="radio" name="avail" value=""{{if not .Query.Avail}} checked{{end}}> Toutes</label>
+        <label class="check"><input type="radio" name="avail" value="available"{{if eq .Query.Avail "available"}} checked{{end}}> Disponibles</label>
+        <label class="check"><input type="radio" name="avail" value="lent"{{if eq .Query.Avail "lent"}} checked{{end}}> Prêtées</label>
       </fieldset>
       <fieldset>
         <legend>Diamètre</legend>
@@ -68,7 +85,7 @@
         {{range sorts}}<option value="{{.Code}}"{{if eq .Code $.Query.Sort}} selected{{end}}>{{.Label}}</option>{{end}}
       </select>
     </label>
-    <a href="/stock">Réinitialiser</a>
+    <a href="/stock{{with .Query.Scope}}?scope={{.}}{{end}}">Réinitialiser</a>
     <noscript><button class="btn">Filtrer</button></noscript>
   </div>
 </form>
@@ -77,33 +94,56 @@
 {{end}}
 
 {{define "results"}}
-{{if eq .Total 0}}
+{{if and .Mine (eq .Total 0)}}
 <div class="empty-state">
   <p><strong>Votre stock est vide.</strong></p>
   <p>Scannez la boîte d'une bobine, ou ajoutez-la à la main.</p>
   <p><a class="btn primary" href="/scan">Scanner une boîte</a> <a class="btn" href="/spools/new">Ajouter à la main</a></p>
 </div>
+{{else if eq .Total 0}}
+<p class="empty-state">Aucune bobine visible pour l'instant.</p>
 {{else}}
 <p class="count">{{len .Items}} {{plural (len .Items) "bobine" "bobines"}}{{if .Query.Active}} sur {{.Total}}{{end}}</p>
-{{if .Items}}
-<ul class="spools">{{range .Items}}{{template "spool_row" (dict "Item" .)}}{{end}}</ul>
-{{else}}
+{{if not .Items}}
 <p class="empty-state">Aucune bobine ne correspond à ces critères.</p>
+{{else if .Friend}}
+<form method="get" action="/transfers/new" class="select-form">
+  <input type="hidden" name="to" value="{{.Friend.ID}}">
+  <ul class="spools">{{range .Items}}{{template "spool_row" (dict "Item" . "Mine" false "Select" true "Me" $.User.ID)}}{{end}}</ul>
+  <div class="select-bar">
+    <span class="muted small">Cochez des bobines puis :</span>
+    <button class="btn" name="kind" value="loan">Demander un prêt</button>
+    <button class="btn" name="kind" value="gift">Demander un don</button>
+  </div>
+</form>
+{{else}}
+<ul class="spools">{{range .Items}}{{template "spool_row" (dict "Item" . "Mine" $.Mine "ShowOwner" (not $.Mine) "Me" $.User.ID)}}{{end}}</ul>
 {{end}}
 {{end}}
 {{end}}
 
-{{define "spool_row"}}{{with .Item}}
+{{define "spool_row"}}{{$mine := .Mine}}{{$me := .Me}}{{$select := .Select}}{{$owner := .ShowOwner}}{{with .Item}}
 <li class="spool{{if eq .Level "empty"}} is-empty{{end}}" id="spool-{{.ID}}">
+  {{if and $select (not .Loan)}}<input type="checkbox" name="spool" value="{{.ID}}" aria-label="Sélectionner {{.Product.ColorName}}">{{end}}
   <span class="swatch" style="background: {{.Hex}}"></span>
-  <a class="spool-main" href="/spools/{{.ID}}">
+  {{if $mine}}<a class="spool-main" href="/spools/{{.ID}}">{{else}}<div class="spool-main">{{end}}
     <strong>{{.Product.ColorName}}</strong>
     <span class="muted">{{.Product.Brand}} · {{materialText .Product}}{{if ne .Product.Finish "standard"}} · {{finishText .Product}}{{end}} · {{weight .Product.NominalWeightG}}{{if ne .Product.DiameterMM 1.75}} · {{diameter .Product.DiameterMM}}{{end}}</span>
-  </a>
+    {{if $owner}}<span class="small"><a href="/stock?scope={{.UserID}}">{{.OwnerName}}</a></span>{{end}}
+  {{if $mine}}</a>{{else}}</div>{{end}}
   {{if ge .Distance 0.0}}<span class="delta" title="Écart de couleur (ΔE2000)">ΔE {{printf "%.1f" .Distance}}</span>{{end}}
+  {{if .Loan}}
+    {{if $mine}}<span class="tag lent">Prêtée à {{.Loan.BorrowerName}}</span>
+    {{else if eq .Loan.BorrowerID $me}}<span class="tag lent">Empruntée par vous</span>
+    {{else}}<span class="tag lent">Prêtée</span>{{end}}
+  {{end}}
+  {{if and $mine (not .Loan)}}
   <select class="level level-{{.Level}}" name="level" aria-label="Niveau"
           hx-post="/spools/{{.ID}}/level" hx-trigger="change" hx-target="#spool-{{.ID}}" hx-swap="outerHTML">
     {{$cur := .Level}}{{range levels}}<option value="{{.Code}}"{{if eq .Code $cur}} selected{{end}}>{{.Label}}</option>{{end}}
   </select>
+  {{else}}
+  <span class="level level-{{.Level}}">{{levelLabel .Level}}</span>
+  {{end}}
 </li>
 {{end}}{{end}}

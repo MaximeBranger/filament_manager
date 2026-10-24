@@ -20,8 +20,14 @@
     <a href="/stock"{{if eq .Path "/stock"}} aria-current="page"{{end}}>Stock</a>
     <a href="/scan"{{if eq .Path "/scan"}} aria-current="page"{{end}}>Scanner</a>
     <a href="/reception"{{if eq .Path "/reception"}} aria-current="page"{{end}}>Réception</a>
+    <a href="/friends"{{if eq .Path "/friends"}} aria-current="page"{{end}}>Amis</a>
+    <a href="/transfers"{{if eq .Path "/transfers"}} aria-current="page"{{end}}>Prêts</a>
     <a href="/products"{{if eq .Path "/products"}} aria-current="page"{{end}}>Produits</a>
     <a href="/account"{{if eq .Path "/account"}} aria-current="page"{{end}}>Compte</a>
+    <a href="/notifications" class="bell"{{if eq .Path "/notifications"}} aria-current="page"{{end}} aria-label="Notifications{{with .Unread}}, {{.}} non lue(s){{end}}">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1l-2-2Z"/></svg>
+      {{with .Unread}}<span class="badge-count">{{.}}</span>{{end}}
+    </a>
   </nav>
   {{end}}
 </header>

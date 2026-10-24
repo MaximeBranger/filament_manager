@@ -198,7 +198,49 @@ select.level {
 .level-empty { color: var(--lvl-empty); }
 select.level option { color: var(--text); }
 
+span.level {
+  flex: none; padding: .15rem .6rem; border: 1px solid currentColor; border-radius: 999px;
+  font-size: .8rem; font-weight: 600; white-space: nowrap;
+}
+.tag {
+  flex: none; font-size: .75rem; padding: .1rem .5rem; border-radius: 999px; white-space: nowrap;
+  background: var(--bg); color: var(--muted); border: 1px solid var(--border);
+}
+.tag.lent { color: var(--focus); border-color: color-mix(in srgb, var(--focus) 40%, var(--border)); }
+.swatch.sm { width: .9rem; height: .9rem; vertical-align: -2px; }
+
 .product-summary { display: flex; align-items: center; gap: .9rem; }
+
+/* Amis, prêts, notifications ------------------------------------------------ */
+
+.bell { position: relative; display: inline-flex; align-items: center; }
+.badge-count {
+  position: absolute; top: -.15rem; right: -.2rem; min-width: 1.05rem; height: 1.05rem; padding: 0 .25rem;
+  border-radius: 999px; background: var(--accent); color: var(--accent-text);
+  font-size: .7rem; font-weight: 700; line-height: 1.05rem; text-align: center;
+}
+.scope { flex-direction: row; align-items: center; gap: .5rem; }
+.scope select { width: auto; flex: 1; max-width: 22rem; }
+.select-form .spool input[type=checkbox] { flex: none; }
+.select-bar {
+  position: sticky; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; gap: .5rem;
+  margin-top: .75rem; padding: .6rem .7rem; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
+.card.highlight { border-color: var(--accent); }
+.plain-list, .history, .compact { list-style: none; padding: 0; margin: .75rem 0 0; }
+.plain-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; padding: .4rem 0; border-top: 1px solid var(--border); }
+.history li { padding: .45rem 0; border-top: 1px solid var(--border); }
+.history li .muted { display: inline-block; min-width: 6.5rem; }
+.notifications li.unread a { font-weight: 600; }
+.compact li { padding: .15rem 0; font-size: .9rem; }
+.message { margin: .5rem 0; padding: .5rem .75rem; border-left: 3px solid var(--border); color: var(--muted); font-style: italic; }
+form.inline { display: inline; }
+.loan-row { flex-wrap: wrap; }
+.loan-action { display: flex; gap: .4rem; align-items: center; }
+.loan-action select { width: auto; min-height: 2rem; padding: .2rem .4rem; }
+.level-select { width: auto !important; min-height: 2rem !important; padding: .2rem .4rem !important; }
+section > h2 { margin-top: 1.5rem; }
 
 .empty-state { text-align: center; color: var(--muted); padding: 2rem 1rem; }
 .empty-state strong { color: var(--text); }

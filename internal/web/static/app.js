@@ -20,6 +20,36 @@
     if (el.matches('select[data-autosubmit]') && el.value) el.form.requestSubmit();
   });
 
+  // Changer de périmètre recharge toute la page (titre, actions) : on intercepte l'événement
+  // en phase de capture pour que htmx ne rafraîchisse pas seulement les résultats.
+  document.addEventListener('change', (e) => {
+    const el = e.target;
+    if (!el.matches('select[data-autosubmit-always]')) return;
+    e.stopPropagation();
+    const url = new URL(el.form.action, window.location.href);
+    if (el.value) url.searchParams.set(el.name, el.value);
+    window.location.href = url.toString();
+  }, true);
+
+  // Confirmation propre à un bouton (un formulaire peut en avoir plusieurs).
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-confirm-click]');
+    if (btn && !window.confirm(btn.dataset.confirmClick)) e.preventDefault();
+  });
+
+  // Copie d'un lien dans le presse-papiers.
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-copy]');
+    if (!btn) return;
+    const input = document.getElementById(btn.dataset.copy);
+    try {
+      await navigator.clipboard.writeText(input.value);
+      btn.textContent = 'Copié !';
+    } catch (err) {
+      input.select();
+    }
+  });
+
   document.addEventListener('input', (e) => {
     if (e.target.matches('input.js-hex')) e.target.dataset.touched = '1';
   });

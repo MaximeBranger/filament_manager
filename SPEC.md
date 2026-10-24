@@ -12,9 +12,12 @@ Ce document est la référence pour l'implémentation. Les décisions qu'il cont
 |---|---|
 | **v1a** | Comptes (lien magique), produits & bobines, liste / recherche / filtres / couleur proche, scan code-barre (unitaire + réception en série), export & suppression de compte, sauvegardes, Plausible |
 | **v1b** | Amis (invitation par lien), consultation du stock des amis, prêts, dons, notifications (in-app + email) |
+| **v1c** | Partage de modèle 3D : envoi d'un STL, lien public temporaire (mot de passe facultatif), aperçu 3D dans les couleurs du stock, choix du destinataire notifié (§9) |
 | **v2** | Passkeys (WebAuthn), PWA (manifest, service worker, installable) |
 
 Hors périmètre v1 : base EAN externe, catalogue de produits partagé, dates de retour / relances de prêt, captcha, multilingue (FR uniquement), tests E2E navigateur.
+
+Hors périmètre v1c : 3MF et rendu multicolore, plusieurs fichiers par partage, textures procédurales (bois, marbre, carbone), import depuis un dépôt de modèles (§14).
 
 ---
 
@@ -226,7 +229,52 @@ CREATE TABLE notifications (
   created_at  TEXT NOT NULL,
   read_at     TEXT
 );
-CREATE INDEX notifications_user_unread ON notifications(user_id) WHERE read_at IS NULL;
+CREATE INDEX notifications_user ON notifications(user_id, id);
+-- Les migrations ajoutent des index sur les clés étrangères (friendships.user_b_id,
+-- transfer_items.spool_id, loans.lender_id/borrower_id, gifts.giver_id/receiver_id…).
+
+-- Partage de modèles 3D (v1c) ----------------------------------------------------
+CREATE TABLE shares (
+  id               INTEGER PRIMARY KEY,
+  user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash       TEXT NOT NULL UNIQUE,     -- SHA-256 du jeton du lien
+  title            TEXT NOT NULL,            -- nom du modèle affiché au destinataire
+  password_hash    TEXT,                     -- NULL = pas de mot de passe ; "pbkdf2-sha256$<iter>$<sel>$<hash>"
+  password_version INTEGER NOT NULL DEFAULT 0, -- incrémenté à chaque changement : invalide les cookies d'accès
+  failed_attempts  INTEGER NOT NULL DEFAULT 0,
+  locked_at        TEXT,                     -- verrouillé après 20 échecs, levé par un nouveau mot de passe
+  created_at       TEXT NOT NULL,
+  expires_at       TEXT NOT NULL             -- created_at + 7 jours
+);
+CREATE INDEX shares_user ON shares(user_id);
+CREATE INDEX shares_expires ON shares(expires_at);
+
+-- Un seul fichier par partage en v1c ; la table anticipe le multi-fichiers.
+CREATE TABLE share_files (
+  id             INTEGER PRIMARY KEY,
+  share_id       INTEGER NOT NULL REFERENCES shares(id) ON DELETE CASCADE,
+  original_name  TEXT NOT NULL,             -- nom du STL envoyé (affichage uniquement)
+  storage_key    TEXT NOT NULL UNIQUE,      -- nom aléatoire du maillage converti dans SHARE_DIR
+  triangles      INTEGER NOT NULL,
+  size_x_mm      REAL NOT NULL,
+  size_y_mm      REAL NOT NULL,
+  size_z_mm      REAL NOT NULL,
+  bytes          INTEGER NOT NULL,
+  created_at     TEXT NOT NULL
+);
+CREATE INDEX share_files_share ON share_files(share_id);
+
+-- Choix du destinataire (un seul par partage, modifiable jusqu'à l'expiration).
+CREATE TABLE share_choices (
+  share_id        INTEGER PRIMARY KEY REFERENCES shares(id) ON DELETE CASCADE,
+  product_id      INTEGER REFERENCES products(id) ON DELETE SET NULL,
+  label           TEXT NOT NULL,            -- instantané : "eSun PLA+ Galaxy Black (silk)"
+  color_hex       TEXT NOT NULL,            -- instantané
+  recipient_name  TEXT,                     -- facultatif, ≤ 50 caractères
+  message         TEXT,                     -- facultatif, ≤ 500 caractères
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL
+);
 ```
 
 Règles d'intégrité applicatives (vérifiées dans le code + tests) :
@@ -362,24 +410,107 @@ Badge in-app (compteur non lus) + email si `email_notifications = 1`.
 | `loan_returned` | emprunteur | non |
 | `loan_converted_to_gift` | emprunteur | oui |
 | `friend_removed` | — | aucune notification |
+| `share_choice` (v1c, à chaque choix ou modification) | créateur du partage | oui |
+| `share_locked` (v1c) | créateur du partage | oui |
 
 Les emails sont envoyés de façon asynchrone (goroutine + file en mémoire, quelques retries). Échec = log `error`, la notification in-app reste.
 
 ---
 
-## 9. Architecture technique
+## 9. Partage de modèle 3D (v1c)
 
-### 9.1 Stack
+Permet d'envoyer un modèle 3D à **n'importe qui** (sans compte) via un lien, pour qu'il le visualise dans les couleurs disponibles dans le stock du créateur et indique son choix.
+
+**Principe directeur : ce n'est jamais un outil de stockage de STL.** Un partage vit 7 jours, puis tout est supprimé (fichier, partage, choix). Le STL d'origine n'est jamais conservé : seul un maillage converti l'est, le temps du partage.
+
+### 9.1 Création (utilisateur connecté)
+- Écran « Partages » : liste des partages actifs (titre, expiration, mot de passe oui/non, verrouillé, choix du destinataire), bouton « Nouveau partage ».
+- Formulaire : fichier STL (un seul), titre (prérempli avec le nom du fichier), mot de passe facultatif (≥ 6 caractères).
+- Avertissement affiché à la création : « Le destinataire peut techniquement récupérer le modèle 3D. »
+- Durée **fixe de 7 jours**, non prolongeable (recréer un partage si besoin).
+- Après création : affichage du lien `BASE_URL/share/<token>` à copier (jeton 32 octets, montré une seule fois, stocké hashé — comme les invitations) et rappel de transmettre le mot de passe par un autre canal.
+- Actions sur un partage : prévisualiser (vue destinataire), définir / changer / retirer le mot de passe, **révoquer** (suppression immédiate du fichier et du partage).
+- Limites : `SHARE_MAX_ACTIVE` partages actifs par utilisateur (défaut 5), `SHARE_MAX_FILE_SIZE` par fichier (défaut 50 Mo).
+
+### 9.2 Traitement du STL
+À l'envoi, le serveur lit le fichier en mémoire (`http.MaxBytesReader`) et **le convertit** ; tout échec = rejet avec message explicite, rien n'est écrit.
+- Formats acceptés : STL binaire (taille = 84 + 50 × n) ou ASCII (`solid … endsolid`).
+- Validation : au moins 1 triangle, au plus **1 000 000** triangles, coordonnées finies (pas de NaN / Inf). Unité supposée : mm.
+- Normalisation : recentrage en X/Y, Z minimum ramené à 0. Calcul des dimensions (boîte englobante, mm).
+- Écriture d'un maillage binaire compact propre à l'application (en-tête `FMM1`, nombre de triangles, positions `float32` non indexées ; normales recalculées côté navigateur) dans `SHARE_DIR/<storage_key>`, via fichier temporaire + renommage.
+- Le fichier envoyé par l'utilisateur n'est **jamais** renvoyé tel quel au navigateur.
+
+### 9.3 Couleurs proposées
+Calculées **en direct à chaque affichage** à partir du stock du créateur :
+- produits ayant au moins une bobine non `empty`, non `hidden_from_friends`, non prêtée (prêt actif) ;
+- **une pastille par produit** (plusieurs bobines identiques = une pastille), triées par teinte ;
+- informations affichées : nom de couleur, marque, matériau (+ autre), finition (+ autre) et couleur `COALESCE(color_hex, hexa par défaut de la famille)`.
+- Jamais affichés : niveau, nombre de bobines, date d'achat, prix, fournisseur, notes.
+
+### 9.4 Vue destinataire (`/share/<token>`)
+- En-tête : « *Nom d'affichage* vous propose *Titre* », dimensions du modèle (mm), date d'expiration.
+- Aperçu 3D (**Three.js** servi localement, comme zxing / htmx) : rotation / zoom à la souris et au doigt, fond clair / sombre, clic sur une pastille = application de la couleur.
+- Avertissement permanent : « Les couleurs et finitions affichées sont indicatives et peuvent différer du rendu réel. »
+- Rendu des finitions (paramètres de `MeshPhysicalMaterial`, aucune texture) :
+
+| Finition / famille | Rendu |
+|---|---|
+| `standard` | semi-mat |
+| `matte` | très mat |
+| `glossy` | brillant + vernis (clearcoat) |
+| `silk` | brillant légèrement métallique |
+| `glitter` | brillant + paillettes simulées (bruit léger) |
+| `glow` | interrupteur « vue dans le noir » (émissif, scène sombre) |
+| famille `transparent` | translucide |
+| `marble`, `wood`, `carbon`, `multicolor`, `OTHER` | couleur de base + mention « rendu non représentatif » |
+
+- **Choix** : bouton « Je choisis cette couleur » → prénom (facultatif, ≤ 50 car.) et message (facultatif, ≤ 500 car.). Un seul choix par partage, modifiable jusqu'à l'expiration (le dernier remplace le précédent). Chaque enregistrement notifie le créateur (`share_choice`, in-app + email). Limité à 10 envois / 15 min par IP et par partage (en mémoire, §5.3).
+- Partage expiré, révoqué ou inconnu : page unique « Ce partage n'est plus disponible », sans révéler le créateur.
+- En-têtes propres aux pages de partage : `X-Robots-Tag: noindex`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`.
+
+### 9.5 Mot de passe (facultatif)
+- Stocké hashé **PBKDF2-SHA256** (`crypto/pbkdf2`, bibliothèque standard), 600 000 itérations, sel aléatoire 16 octets. Non relisible : en cas d'oubli, le créateur en définit un nouveau.
+- Sans saisie valide, le destinataire ne voit qu'une page neutre (ni créateur, ni titre, ni modèle).
+- Saisie correcte → cookie d'accès propre au partage : `Path=/share/<token>`, `HttpOnly`, `Secure`, `SameSite=Lax`, signé HMAC (`SESSION_SECRET`) sur `share_id` + `password_version`, expirant avec le partage. Changer ou retirer le mot de passe incrémente `password_version` et invalide les cookies existants.
+- Le maillage et l'envoi du choix exigent aussi ce cookie : l'URL du fichier ne contourne pas le mot de passe.
+- Anti-force brute : 5 essais / 15 min par IP et par partage (en mémoire) ; après **20 échecs cumulés** (toutes IP), le partage est **verrouillé** (`locked_at`), le créateur est notifié (`share_locked`) et le déverrouille en définissant un nouveau mot de passe (compteur remis à zéro).
+
+### 9.6 Cycle de vie et suppression
+- Tâche de fond toutes les 15 min (même modèle que les sauvegardes) : suppression des fichiers puis des lignes des partages expirés.
+- Révocation manuelle : suppression immédiate.
+- Au démarrage : suppression des fichiers de `SHARE_DIR` sans ligne `share_files` correspondante (orphelins après crash).
+- Suppression de compte : fichiers supprimés avec le reste (cascade en base + effacement disque).
+- Export de compte : métadonnées des partages actifs et choix reçus, **sans** les fichiers.
+- `SHARE_DIR` est **exclu des sauvegardes**.
+
+### 9.7 Routes
+| Méthode | Route | Accès |
+|---|---|---|
+| GET | `/shares`, `/shares/new` | connecté |
+| POST | `/shares` (multipart) | connecté |
+| POST | `/shares/{id}/password`, `/shares/{id}/revoke` | connecté, propriétaire |
+| GET | `/share/{token}` | public (+ cookie si mot de passe) |
+| POST | `/share/{token}/unlock` | public |
+| GET | `/share/{token}/files/{fileID}` | public (+ cookie si mot de passe) |
+| POST | `/share/{token}/choice` | public (+ cookie si mot de passe) |
+
+Les POST publics restent couverts par `http.CrossOriginProtection` (§10.3).
+
+---
+
+## 10. Architecture technique
+
+### 10.1 Stack
 - **Go** (dernière version stable), un seul binaire.
 - HTTP : `net/http` (routeur standard Go ≥ 1.22).
 - Rendu : `html/template` + **htmx** (servi localement). JS maison minimal : scanner, sélecteur de couleur, liste de réception.
 - SQLite : `modernc.org/sqlite` (pur Go, **sans CGO**). Requêtes écrites à la main avec `database/sql` dans le package `store` (sqlc écarté : les filtres dynamiques sont faits en mémoire, le gain ne justifiait pas un outil de génération de plus).
-- Interface en français, **vouvoiement**.
+- Interface en français, **vouvoiement**. Dates affichées à l'heure de Paris (`time/tzdata` embarqué : l'image distroless n'a pas de base de fuseaux).
 - Migrations SQL versionnées, **embarquées** (`embed`), appliquées automatiquement au démarrage, uniquement ascendantes.
 - Templates, CSS, JS, migrations embarqués dans le binaire.
 - CSS : feuille maison légère, mobile-first, pas de framework ni d'étape de build front.
 
-### 9.2 Arborescence
+### 10.2 Arborescence
 ```
 cmd/filamentmanager/main.go     # config, wiring, démarrage, sous-commande healthcheck
 internal/config/                # lecture + validation des env vars
@@ -395,30 +526,34 @@ internal/backup/                # VACUUM INTO périodique + rétention
 internal/web/                   # handlers HTTP, middlewares, rendu
 internal/web/templates/  internal/web/static/   # embarqués dans le binaire
 ```
-v1b ajoutera `internal/store` (amis, transferts, notifications) et les handlers correspondants.
+v1b : `internal/store/{friends,transfers,notifications}.go` (règles de visibilité et de transfert appliquées dans les requêtes, en transaction) et `internal/web/{friends,transfer}_handlers.go` + `notify.go` (rédaction des notifications, envoi des emails en arrière-plan avec 3 tentatives).
+v1c ajoutera `internal/share/` (lecture / validation / conversion STL, mot de passe, purge) et `internal/web/static/vendor/three/` (Three.js + OrbitControls, modules ES).
 
-### 9.3 Sécurité
+### 10.3 Sécurité
 - **Cloisonnement** : toute requête de lecture/écriture filtre sur `user_id` de la session ; l'accès au stock d'un tiers passe par une seule fonction de vérification d'amitié + règles §7.2. Couvert par des tests dédiés.
 - **CSRF** : cookie `SameSite=Lax` + `http.CrossOriginProtection` de la bibliothèque standard (Go ≥ 1.25), qui rejette les requêtes non sûres cross-origin d'après `Sec-Fetch-Site` / `Origin`. Pas de jeton à propager dans les formulaires. `BASE_URL` est déclarée origine de confiance ; Nginx Proxy Manager doit transmettre l'en-tête `Host` d'origine (comportement par défaut).
 - En-têtes : `Content-Security-Policy` stricte (`default-src 'self'`, + origine Plausible si activé), `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `Permissions-Policy: camera=(self)`.
-- Jetons (session, lien magique, invitation) : 32 octets `crypto/rand`, stockés hashés (SHA-256), comparaison en temps constant.
-- Aucune donnée personnelle dans les URL suivies par Plausible.
+- Jetons (session, lien magique, invitation, partage) : 32 octets `crypto/rand`, stockés hashés (SHA-256), comparaison en temps constant.
+- Aucune donnée personnelle dans les URL suivies par Plausible. Les pages `/share/<token>` sont remontées sous l'URL générique `/share/*` : le jeton ne part jamais chez Plausible.
+- Pages de partage (v1c) : seule surface publique de l'application, règles spécifiques au §9.
 
-### 9.4 Sauvegardes
+### 10.4 Sauvegardes
 - Si `BACKUP_DIR` défini : `VACUUM INTO '<BACKUP_DIR>/filamentmanager-<horodatage>.db'` toutes les `BACKUP_INTERVAL`, conservation des `BACKUP_RETENTION` derniers fichiers.
 - `BACKUP_DIR` sur un volume distinct de `/data`, récupéré par la sauvegarde externe quotidienne du serveur.
+- `SHARE_DIR` (maillages temporaires des partages) n'est pas sauvegardé.
 
-### 9.5 Observabilité
+### 10.5 Observabilité
 - Logs JSON sur stdout (`log/slog`), niveau `LOG_LEVEL`. Jamais de jeton ni de code dans les logs.
 - `GET /healthz` : processus vivant. `GET /readyz` : base accessible (`SELECT 1`).
 - Plausible injecté uniquement si `PLAUSIBLE_URL` et `PLAUSIBLE_DOMAIN` sont définis ; mentionné dans la page confidentialité.
 
-### 9.6 Pages légales
+### 10.6 Pages légales
 `/confidentialite` : données collectées, finalités, Plausible (sans cookie), durée de conservation, suppression & export en libre-service, contact.
+v1c : données saisies par le destinataire d'un partage (prénom et message facultatifs), IP conservée uniquement en mémoire pour la limitation des tentatives, cookie d'accès propre au partage, suppression des modèles 3D et des choix à l'expiration (7 jours).
 
 ---
 
-## 10. Configuration (variables d'environnement)
+## 11. Configuration (variables d'environnement)
 
 L'application **refuse de démarrer** si une variable obligatoire manque ou est invalide, avec un message explicite.
 
@@ -444,18 +579,21 @@ L'application **refuse de démarrer** si une variable obligatoire manque ou est 
 | `PLAUSIBLE_URL` | URL de l'instance Plausible | vide |
 | `PLAUSIBLE_DOMAIN` | Domaine déclaré dans Plausible | vide |
 | `LOG_LEVEL` | `debug` \| `info` \| `warn` \| `error` | `info` |
+| `SHARE_DIR` | Dossier des maillages des partages (v1c), peut être un volume dédié | `/data/shares` |
+| `SHARE_MAX_FILE_SIZE` | Taille maximale d'un STL envoyé (v1c) | `50MB` |
+| `SHARE_MAX_ACTIVE` | Partages actifs par utilisateur (v1c) | `5` |
 
 ---
 
-## 11. Build, CI/CD, déploiement
+## 12. Build, CI/CD, déploiement
 
-- **Image Docker** multi-étapes : build Go (`CGO_ENABLED=0`) → image finale distroless/static non-root. Volumes : `/data` (base), `/backups` (si `BACKUP_DIR=/backups`). Port exposé : 8080.
+- **Image Docker** multi-étapes : build Go (`CGO_ENABLED=0`) → image finale distroless/static non-root. Volumes : `/data` (base), `/backups` (si `BACKUP_DIR=/backups`), éventuellement un volume dédié pour `SHARE_DIR` (v1c). Port exposé : 8080.
 - **CI GitHub Actions** : `go vet`, `go test ./...`, build et push de l'image vers Nexus. *Modèle de workflow et stratégie de tags à fournir par Maxime lors de la mise en place.*
 - **Production** : une seule instance (contrainte SQLite). TLS terminé par **Nginx Proxy Manager** sur le serveur ; l'application écoute en HTTP. `TRUSTED_PROXIES` = IP/sous-réseau Docker de NPM.
 
 ---
 
-## 12. Tests
+## 13. Tests
 
 - **Unitaires** : ΔE2000 (jeux de référence publiés de Sharma et al.), conversion hexa → Lab, normalisation des marques, machine à états des transferts (pending → accepted/refused/cancelled ; loan → returned/gifted), règles de visibilité, rate limiter.
 - **Intégration HTTP** (`httptest` + SQLite temporaire par test + `Mailer` factice qui capture les emails) :
@@ -466,11 +604,20 @@ L'application **refuse de démarrer** si une variable obligatoire manque ou est 
   - don (proposition, demande, conversion de prêt, copie de produit, effacement des champs privés) ;
   - suppression de compte (refus si prêt actif, cascade sinon) ;
   - réception en série (création de N bobines en une transaction).
+- **v1c — unitaires** : lecture STL binaire / ASCII, rejets (fichier tronqué, NaN / Inf, 0 triangle, plafond de triangles), recentrage et dimensions, format `FMM1`, hash / vérification PBKDF2, signature et invalidation du cookie d'accès, sélection des couleurs (exclusion vides / masquées / prêtées, regroupement par produit).
+- **v1c — intégration HTTP** :
+  - création (taille max, `SHARE_MAX_ACTIVE`), révocation et expiration suppriment fichier + lignes, nettoyage des orphelins au démarrage ;
+  - **cloisonnement** : actions `/shares/{id}/…` refusées à un autre utilisateur ; la page publique n'expose aucun champ privé (niveau, prix, fournisseur, notes) ;
+  - mot de passe : page neutre sans cookie, fichier inaccessible sans cookie, limitation par IP, verrouillage à 20 échecs + notification, déverrouillage par nouveau mot de passe ;
+  - choix : remplacement du précédent, notification + email au créateur, limitation par IP ;
+  - suppression de compte : fichiers de partage effacés du disque.
 - Pas de tests E2E navigateur en v1.
 
 ---
 
-## 13. Points ouverts
+## 14. Points ouverts
 
 - Modèle GitHub Actions et stratégie de tags d'image (à fournir).
 - Nom de domaine → `BASE_URL`, `SMTP_FROM`, `PLAUSIBLE_DOMAIN`.
+- **Import depuis un dépôt de modèles** (Printables, Thingiverse…, lot ultérieur à v1c) : fournir une URL et laisser l'application récupérer le modèle. À spécifier : API et conditions d'utilisation de chaque site, protection SSRF (liste blanche de domaines, pas d'IP privées, taille et délai bornés), archives zip multi-fichiers (nécessite plusieurs `share_files` par partage).
+- **3MF / multicolore** (après v1c) : une couleur par pièce ou par objet.

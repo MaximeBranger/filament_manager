@@ -131,6 +131,20 @@ func TestApplyFilters(t *testing.T) {
 	}
 }
 
+func TestApplyAvailability(t *testing.T) {
+	spools := []store.Spool{sample[0], sample[1]}
+	spools[1].Loan = &store.ActiveLoan{ID: 1, BorrowerID: 2}
+	if got := ids(ParseQuery(form("avail", "lent")).Apply(spools)); !eq(got, []int64{2}) {
+		t.Errorf("prêtées : %v", got)
+	}
+	if got := ids(ParseQuery(form("avail", "available")).Apply(spools)); !eq(got, []int64{1}) {
+		t.Errorf("disponibles : %v", got)
+	}
+	if q := ParseQuery(form("avail", "n'importe")); q.Avail != "" {
+		t.Error("valeur de disponibilité inconnue acceptée")
+	}
+}
+
 func TestApplyNearColor(t *testing.T) {
 	q := ParseQuery(form("near_on", "1", "near", "#1976d2", "tol", "20"))
 	items := q.Apply(sample)
