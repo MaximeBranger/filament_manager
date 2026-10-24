@@ -15,6 +15,7 @@ import (
 	"github.com/MaximeBranger/filament_manager/internal/auth"
 	"github.com/MaximeBranger/filament_manager/internal/config"
 	"github.com/MaximeBranger/filament_manager/internal/mail"
+	"github.com/MaximeBranger/filament_manager/internal/reference"
 	"github.com/MaximeBranger/filament_manager/internal/store"
 )
 
@@ -39,8 +40,10 @@ type Server struct {
 	passkeyRate *auth.RateLimiter
 	// uploadSlots borne les conversions de STL simultanées (chacune lit le fichier en mémoire).
 	uploadSlots chan struct{}
-	csp         string
-	syncMail    bool // envoi synchrone des emails de notification (tests)
+	// reference cherche un code-barre dans le catalogue de référence (remplaçable en test).
+	reference func(code string) (reference.Entry, bool)
+	csp       string
+	syncMail  bool // envoi synchrone des emails de notification (tests)
 }
 
 func New(cfg *config.Config, st *store.Store, mailer mail.Mailer, log *slog.Logger, version string) (*Server, error) {
@@ -59,6 +62,7 @@ func New(cfg *config.Config, st *store.Store, mailer mail.Mailer, log *slog.Logg
 		ceremonies:  &ceremonies{m: map[string]ceremony{}},
 		passkeyRate: auth.NewRateLimiter(30, 15*time.Minute),
 		uploadSlots: make(chan struct{}, maxConcurrentUploads),
+		reference:   reference.Lookup,
 	}
 	wa, err := webauthn.New(&webauthn.Config{
 		RPID:          cfg.WebAuthnRPID,
@@ -112,6 +116,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /offline", s.offline)
 	mux.HandleFunc("GET /{$}", s.home)
 	mux.HandleFunc("GET /confidentialite", s.privacy)
+	mux.HandleFunc("GET /credits", s.credits)
 
 	mux.HandleFunc("GET /login", s.loginForm)
 	mux.HandleFunc("POST /login", s.loginSubmit)
@@ -134,7 +139,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /spools/{id}/level", user(s.spoolLevel))
 	mux.Handle("POST /spools/{id}/delete", user(s.spoolDelete))
 	mux.Handle("GET /products", user(s.productList))
+	mux.Handle("POST /products/resync", user(s.productResyncAll))
 	mux.Handle("GET /products/{id}", user(s.productEdit))
+	mux.Handle("POST /products/{id}/resync", user(s.productResync))
 	mux.Handle("POST /products/{id}", user(s.productUpdate))
 	mux.Handle("POST /products/{id}/delete", user(s.productDelete))
 	mux.Handle("GET /scan", user(s.scanPage))
@@ -222,6 +229,13 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.render(w, r, http.StatusOK, "home", nil)
+}
+
+func (s *Server) credits(w http.ResponseWriter, r *http.Request) {
+	version, count := reference.Info()
+	s.render(w, r, http.StatusOK, "credits", map[string]any{
+		"Title": "Crédits", "RefVersion": version, "RefCount": count, "RefLicense": reference.License,
+	})
 }
 
 func (s *Server) privacy(w http.ResponseWriter, r *http.Request) {

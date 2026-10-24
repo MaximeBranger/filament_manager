@@ -11,6 +11,9 @@
   const receptionForm = document.getElementById('reception-form');
   const submitButton = document.getElementById('reception-submit');
   const errorBox = document.getElementById('reception-error');
+  const refNote = document.getElementById('ref-note');
+  const refLine = document.getElementById('ref-line');
+  const newIntro = document.getElementById('new-intro');
 
   /** @type {{ean: string, productId: number, product: object|null, label: string, hex: string, quantity: number, error: string}[]} */
   const items = [];
@@ -89,21 +92,32 @@
         status.textContent = `Ajouté : ${data.product.label}`;
         render();
       } else {
-        askNewProduct(ean);
+        askNewProduct(ean, data.reference, data.line);
       }
     } catch (err) {
       status.textContent = 'Erreur réseau, réessayez.';
     }
   }
 
-  function askNewProduct(ean) {
+  // reference : valeurs proposées par le catalogue de référence (Open Filament Database), ou rien.
+  function askNewProduct(ean, reference, line) {
     pendingEAN = ean;
     newForm.reset();
     delete newForm.elements.color_hex.dataset.touched;
+    if (reference) {
+      Object.entries(reference).forEach(([name, value]) => {
+        const field = newForm.elements[name];
+        if (field && value !== '') field.value = value;
+      });
+      newForm.elements.color_hex.dataset.touched = '1'; // la teinte de référence prime sur celle de la famille
+    }
     newForm.elements.ean.value = ean;
     newForm.querySelectorAll('select[data-other]').forEach((s) => s.dispatchEvent(new Event('change', { bubbles: true })));
+    refNote.hidden = !reference;
+    newIntro.hidden = !!reference;
+    refLine.textContent = line ? ` (gamme « ${line} »)` : '';
     newCard.hidden = false;
-    status.textContent = `Code inconnu : ${ean}`;
+    status.textContent = reference ? `Reconnu dans la référence : ${ean}` : `Code inconnu : ${ean}`;
     newForm.elements.brand.focus();
     render();
   }

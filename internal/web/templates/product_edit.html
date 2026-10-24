@@ -1,5 +1,21 @@
 {{define "content"}}
 <h1>Produit</h1>
+{{if .RefDiffs}}
+<div class="card ref-diff">
+  <h2>Différences avec la référence</h2>
+  <p class="small muted">Ce code-barre est connu de l'<a href="/credits">Open Filament Database</a>{{with .Reference.Line}} (gamme « {{.}} »){{end}}. Votre fiche diffère sur :</p>
+  <table class="diff-table">
+    <thead><tr><th scope="col">Champ</th><th scope="col">Votre fiche</th><th scope="col">Référence</th></tr></thead>
+    <tbody>
+      {{range .RefDiffs}}<tr><th scope="row">{{.Field}}</th><td>{{.Mine}}</td><td>{{.Ref}}</td></tr>{{end}}
+    </tbody>
+  </table>
+  <form method="post" action="/products/{{.Product.ID}}/resync" class="actions"
+        data-confirm="Remplacer toutes les informations de ce produit par celles de la référence ?{{if .Product.SpoolCount}} Cela s'applique à {{.Product.SpoolCount}} {{plural .Product.SpoolCount "bobine" "bobines"}}.{{end}}">
+    <button class="btn primary">Resynchroniser avec la référence</button>
+  </form>
+</div>
+{{end}}
 <form method="post" action="/products/{{.Product.ID}}" class="card">
   {{if .Product.SpoolCount}}<p class="notice">Les modifications s'appliquent à {{.Product.SpoolCount}} {{plural .Product.SpoolCount "bobine" "bobines"}}.</p>{{end}}
   {{template "datalists" .}}

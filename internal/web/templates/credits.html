@@ -1,0 +1,22 @@
+{{define "content"}}
+<article class="prose">
+  <h1>Crédits</h1>
+
+  <h2>Base de référence des filaments</h2>
+  <p>La reconnaissance des codes-barres inconnus de votre stock s'appuie sur l'<a href="https://github.com/OpenFilamentCollective/open-filament-database" rel="noopener">Open Filament Database</a>, base communautaire maintenue par l'Open Filament Collective et SimplyPrint.</p>
+  <p class="small muted">Version embarquée : {{.RefVersion}} · {{.RefCount}} codes-barres. Mise à jour chaque semaine. Un code manque ou est erroné ? Vous pouvez <a href="https://openfilamentdatabase.org" rel="noopener">contribuer à la base</a>.</p>
+  <details>
+    <summary>Licence de l'Open Filament Database (MIT)</summary>
+    <pre class="license">{{.RefLicense}}</pre>
+  </details>
+
+  <h2>Logiciels libres utilisés</h2>
+  <ul>
+    <li><a href="https://htmx.org" rel="noopener">htmx</a> : licence 0BSD</li>
+    <li><a href="https://github.com/zxing-js/library" rel="noopener">ZXing (zxing-js)</a> : lecture des codes-barres, licence Apache 2.0</li>
+    <li><a href="https://threejs.org" rel="noopener">Three.js</a> : aperçu 3D, licence MIT</li>
+    <li><a href="https://github.com/go-webauthn/webauthn" rel="noopener">go-webauthn</a> : passkeys, licence BSD-3-Clause</li>
+    <li><a href="https://gitlab.com/cznic/sqlite" rel="noopener">modernc.org/sqlite</a> : base de données, licence BSD-3-Clause</li>
+  </ul>
+</article>
+{{end}}

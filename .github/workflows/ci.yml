@@ -6,6 +6,9 @@ on:
       - '**'
     tags:
       - '**'
+  # Lancement manuel, et par le workflow de mise à jour de la référence : un push fait avec le
+  # jeton des Actions ne déclenche pas les autres workflows.
+  workflow_dispatch:
 
 # Jeton GitHub en lecture seule : aucun job n'écrit sur le dépôt.
 permissions:

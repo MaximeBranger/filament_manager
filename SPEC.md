@@ -15,7 +15,7 @@ Ce document est la référence pour l'implémentation. Les décisions qu'il cont
 | **v1c** | Partage de modèle 3D : envoi d'un STL, lien public temporaire (mot de passe facultatif), aperçu 3D dans les couleurs du stock, choix du destinataire notifié (§9) |
 | **v2** | Passkeys (WebAuthn), PWA (manifest, service worker, installable) |
 
-Hors périmètre v1 : base EAN externe, catalogue de produits partagé, dates de retour / relances de prêt, captcha, multilingue (FR uniquement), tests E2E navigateur.
+Hors périmètre v1 : API EAN externe interrogée à l'exécution (la référence des codes-barres est embarquée, §6.5), catalogue de produits partagé, dates de retour / relances de prêt, captcha, multilingue (FR uniquement), tests E2E navigateur.
 
 Hors périmètre v1c : 3MF et rendu multicolore, plusieurs fichiers par partage, textures procédurales (bois, marbre, carbone), import depuis un dépôt de modèles (§14).
 
@@ -364,6 +364,21 @@ WebAuthn en complément, le lien magique restant le moyen de récupération. Bib
   - Validation finale : date d'achat commune (défaut aujourd'hui), fournisseur commun optionnel → création en une transaction.
 
 ---
+
+### 6.5 Référence des codes-barres (Open Filament Database)
+- **Source** : [Open Filament Database](https://github.com/OpenFilamentCollective/open-filament-database), base communautaire sous licence MIT. On utilise l'export complet `all.json.gz` de ses releases quotidiennes `dataset-vAAAA.MM.JJ`.
+- **Index embarqué** : `internal/reference/ofd.json`, produit par `cmd/ofdimport`. Il ne garde que les références portant un code-barre (≈ 6 000), transposées dans notre référentiel :
+  - matériaux : PLA, avec « PLA+ » repéré dans le nom de gamme ; PA6/PA11/PA12/PPA → PA ; les autres → « Autre » avec leur nom ;
+  - finition d'après les traits, par priorité : phosphorescent, fibre de carbone, marbre, bois, multicolore (coextrudé, dégradé, plusieurs teintes), pailleté, silk, mat ;
+  - famille de couleur déduite de la teinte (TSL), transparente ou multicolore d'après les traits ;
+  - diamètres 1,75 et 2,85 mm seulement ; une bobine est préférée à sa recharge quand elles partagent un code.
+
+  Le fichier compte une ligne par code-barre (diffs lisibles), et la licence MIT est embarquée (`LICENSE-OFD`).
+- **Aucun appel réseau à l'exécution.** Codes normalisés sur 13 chiffres : un UPC-A de 12 chiffres prend un zéro devant.
+- **Usage** : un code présent dans les produits de l'utilisateur prime toujours. Sinon, au scan unitaire comme en réception, la référence **préremplit** le formulaire (mention de la source et de la gamme) ; l'utilisateur vérifie et valide.
+- **Écarts** : sur la fiche d'un produit dont le code-barre est connu de la référence, un tableau liste les champs qui diffèrent (marque, matériau, couleur, famille, teinte au-delà de ΔE 3, finition, diamètre, poids). Le bouton « Resynchroniser avec la référence » remplace intégralement ces informations ; le code-barre est conservé et toutes les bobines suivent. La liste « Produits » signale les produits divergents (« ≠ référence ») et propose une resynchronisation groupée. Calcul à l'affichage, rien n'est stocké.
+- **Mise à jour** : le workflow `reference-refresh.yml` tourne chaque lundi. Il télécharge la dernière release, convertit, teste, puis ouvre ou met à jour la pull request `reference/ofd-update` si des codes ont changé, et lance la CI sur cette branche. Cela exige le réglage du dépôt « Allow GitHub Actions to create and approve pull requests ». Un export de moins de 1 000 codes est refusé (export suspect).
+- **Crédits** : page `/credits` (source, version embarquée, texte de la licence MIT, bibliothèques utilisées), liée depuis le pied de page.
 
 ## 7. Amis
 

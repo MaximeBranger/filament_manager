@@ -147,6 +147,56 @@ func ValidDiameter(d float64) bool {
 	return false
 }
 
+// FamilyFromHSL classe une couleur (teinte 0–360, saturation et luminosité 0–1) dans une
+// famille. Sert à rattacher une teinte importée à nos filtres.
+func FamilyFromHSL(h, s, l float64) string {
+	switch {
+	case l < 0.16:
+		return "black"
+	case l > 0.9 && s < 0.6:
+		return "white"
+	case s < 0.22: // gris, y compris légèrement teintés (« Charcoal Gray » bleuté)
+		if l > 0.85 {
+			return "white"
+		}
+		return "grey"
+	}
+	switch {
+	case h < 14 || h >= 345:
+		if l > 0.72 {
+			return "pink"
+		}
+		if l < 0.3 && s < 0.6 {
+			return "brown"
+		}
+		return "red"
+	case h < 40:
+		if l > 0.8 || (l > 0.68 && s < 0.6) {
+			return "beige"
+		}
+		if l < 0.38 || (s < 0.45 && l < 0.55) {
+			return "brown"
+		}
+		return "orange"
+	case h < 70:
+		if l > 0.7 && s < 0.5 {
+			return "beige"
+		}
+		if l < 0.3 {
+			return "brown"
+		}
+		return "yellow"
+	case h < 170:
+		return "green"
+	case h < 255:
+		return "blue"
+	case h < 290:
+		return "purple"
+	default:
+		return "pink"
+	}
+}
+
 var foldMap = map[rune]string{
 	'à': "a", 'â': "a", 'ä': "a", 'á': "a", 'ã': "a", 'å': "a",
 	'ç': "c",

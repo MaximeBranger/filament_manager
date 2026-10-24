@@ -1,0 +1,82 @@
+name: Référence filaments
+
+# Chaque lundi, récupère la dernière version publiée de l'Open Filament Database, la convertit
+# (cmd/ofdimport) et ouvre ou met à jour une pull request si des codes-barres ont changé.
+on:
+  schedule:
+    - cron: '0 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write       # pousser la branche de mise à jour
+  pull-requests: write  # ouvrir la pull request
+  actions: write        # lancer la CI sur cette branche
+
+concurrency:
+  group: reference-refresh
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    name: Mise à jour depuis l'Open Filament Database
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OFD_REPO: OpenFilamentCollective/open-filament-database
+      BRANCH: reference/ofd-update
+      FILE: internal/reference/ofd.json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Télécharger la dernière version publiée
+        run: |
+          set -e
+          tag="$(gh release list -R "$OFD_REPO" --limit 1 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[0].tagName')"
+          echo "Version : $tag"
+          gh release download "$tag" -R "$OFD_REPO" -p all.json.gz -D "$RUNNER_TEMP"
+          echo "OFD_TAG=$tag" >> "$GITHUB_ENV"
+
+      - name: Convertir
+        run: go run ./cmd/ofdimport -in "$RUNNER_TEMP/all.json.gz" -out "$FILE"
+
+      - name: Vérifier
+        run: go test ./internal/reference/...
+
+      - name: Ouvrir ou mettre à jour la pull request
+        run: |
+          set -e
+          # La première ligne (version, date) change à chaque publication : on ne compte que les codes.
+          added=$(git diff -U0 -- "$FILE" | grep -cE '^\+"[0-9]{13}"' || true)
+          removed=$(git diff -U0 -- "$FILE" | grep -cE '^-"[0-9]{13}"' || true)
+          if [ "$added" -eq 0 ] && [ "$removed" -eq 0 ]; then
+            echo "Aucun code-barre modifié : rien à proposer."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          git commit -q -am "Référence filaments : Open Filament Database $OFD_TAG"
+          git push -q -f origin "$BRANCH"
+
+          body="Mise à jour automatique de la référence des codes-barres depuis l'[Open Filament Database](https://github.com/$OFD_REPO) (\`$OFD_TAG\`).
+
+          - Lignes ajoutées ou modifiées : $added
+          - Lignes retirées ou modifiées : $removed
+
+          Le diff de \`$FILE\` montre les codes concernés (une ligne par code-barre)."
+
+          if [ "$(gh pr view "$BRANCH" --json state --jq .state 2>/dev/null)" = "OPEN" ]; then
+            gh pr edit "$BRANCH" --title "Référence filaments : $OFD_TAG" --body "$body"
+          else
+            gh pr create --base main --head "$BRANCH" --title "Référence filaments : $OFD_TAG" --body "$body"
+          fi
+          gh workflow run ci.yml --ref "$BRANCH"

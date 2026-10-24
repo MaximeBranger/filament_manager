@@ -17,7 +17,8 @@
 
 <div id="new-product" class="card" hidden>
   <h2>Nouveau produit</h2>
-  <p class="muted small">Ce code-barre est inconnu : renseignez le produit, il sera reconnu les fois suivantes.</p>
+  <p class="muted small" id="new-intro">Ce code-barre est inconnu : renseignez le produit, il sera reconnu les fois suivantes.</p>
+  <p class="notice small" id="ref-note" hidden>Produit reconnu dans l'<a href="/credits">Open Filament Database</a><span id="ref-line"></span> : vérifiez avant d'ajouter.</p>
   <form id="new-product-form">
     {{template "product_fields" .}}
     <div class="actions">

@@ -68,6 +68,18 @@ docker run -d --name filament-manager \
 - **Passkeys** : elles sont liées au domaine (`WEBAUTHN_RP_ID`, par défaut celui de `BASE_URL`). Changer de domaine les rend inutilisables ; le lien par email reste disponible.
 - **Santé** : `/healthz` (processus) et `/readyz` (base de données). L'image embarque un `HEALTHCHECK`.
 
+## Référence des codes-barres
+
+Les codes-barres inconnus de votre stock sont recherchés dans un index embarqué, tiré de l'[Open Filament Database](https://github.com/OpenFilamentCollective/open-filament-database) (licence MIT, environ 6 000 codes). Aucun appel réseau n'a lieu à l'exécution.
+
+- Régénérer l'index à la main :
+  ```sh
+  gh release download -R OpenFilamentCollective/open-filament-database -p all.json.gz \
+    "$(gh release list -R OpenFilamentCollective/open-filament-database --limit 1 --json tagName --jq '.[0].tagName')"
+  go run ./cmd/ofdimport -in all.json.gz -out internal/reference/ofd.json
+  ```
+- Mise à jour automatique : le workflow [reference-refresh.yml](.github/workflows/reference-refresh.yml) ouvre chaque lundi une pull request quand la base a changé. Il faut activer dans le dépôt *Settings → Actions → General → « Allow GitHub Actions to create and approve pull requests »*.
+
 ## CI
 
 Le workflow [.github/workflows/ci.yml](.github/workflows/ci.yml) enchaîne `gofmt`, `go vet`, les tests avec le détecteur de concurrence, le build de l'image, un scan Trivy et le push vers Nexus.

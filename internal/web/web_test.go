@@ -20,6 +20,7 @@ import (
 	"github.com/MaximeBranger/filament_manager/internal/config"
 	"github.com/MaximeBranger/filament_manager/internal/db"
 	"github.com/MaximeBranger/filament_manager/internal/mail"
+	"github.com/MaximeBranger/filament_manager/internal/reference"
 	"github.com/MaximeBranger/filament_manager/internal/store"
 )
 
@@ -698,5 +699,115 @@ func TestCSVExportNeutralizesFormulas(t *testing.T) {
 	body := c.get("/account/export.csv").Body
 	if !strings.Contains(body, `'=cmd`) || !strings.Contains(body, `'=HYPERLINK`) {
 		t.Errorf("formules non neutralisées :\n%s", body)
+	}
+}
+
+func TestReferencePrefill(t *testing.T) {
+	app := newTestApp(t)
+	app.server.reference = func(code string) (reference.Entry, bool) {
+		if code != "6938936716785" {
+			return reference.Entry{}, false
+		}
+		return reference.Entry{Brand: "eSun", Material: "PLA+", Line: "PLA+", ColorName: "Galaxy Black", ColorFamily: "black",
+			ColorHex: "#1b1b1f", Finish: "silk", DiameterMM: 1.75, WeightG: 1000}, true
+	}
+	c := app.signup("ref@example.fr", "Ref")
+
+	// Scan unitaire : pas de message « inconnu », formulaire prérempli et signalé.
+	r := c.get("/scan/lookup?ean=6938936716785")
+	if r.Location != "/spools/new?ean=6938936716785" {
+		t.Fatalf("redirection : %s", r.Location)
+	}
+	r = c.get(r.Location)
+	for _, want := range []string{`value="eSun"`, `value="Galaxy Black"`, `value="#1b1b1f"`, `<option value="silk" selected>`, "Open Filament Database", `value="6938936716785"`} {
+		if !strings.Contains(r.Body, want) {
+			t.Errorf("préremplissage : %q absent", want)
+		}
+	}
+	if strings.Contains(r.Body, "Code-barre inconnu") {
+		t.Error("un code connu de la référence ne doit pas être annoncé comme inconnu")
+	}
+
+	// Réception : l'API renvoie les valeurs de référence.
+	var out struct {
+		Found     bool
+		Reference map[string]string
+		Line      string
+	}
+	json.Unmarshal([]byte(c.get("/api/products/lookup?ean=6938936716785").Body), &out)
+	if out.Found || out.Reference["brand"] != "eSun" || out.Reference["finish"] != "silk" || out.Line != "PLA+" {
+		t.Errorf("lookup : %+v", out)
+	}
+
+	// Une fois le produit enregistré, le produit de l'utilisateur prime sur la référence.
+	c.post("/spools", newProductForm("ean", "6938936716785", "color_name", "Mon noir"))
+	if r := c.get("/scan/lookup?ean=6938936716785"); !strings.HasPrefix(r.Location, "/spools/new?product_id=") {
+		t.Errorf("le produit de l'utilisateur doit primer : %s", r.Location)
+	}
+	if r := c.get("/credits"); !strings.Contains(r.Body, "Permission is hereby granted") {
+		t.Error("la page Crédits doit reproduire la licence de l'OFD")
+	}
+}
+
+func TestReferenceResync(t *testing.T) {
+	app := newTestApp(t)
+	refs := map[string]reference.Entry{
+		"6938936716785": {Brand: "eSun", Material: "PLA+", ColorName: "Galaxy Black", ColorFamily: "black", ColorHex: "#1b1b1f", Finish: "silk", DiameterMM: 1.75, WeightG: 1000},
+		"5901234123457": {Brand: "Polymaker", Material: "PETG", ColorName: "Teal", ColorFamily: "blue", ColorHex: "#00808a", Finish: "standard", DiameterMM: 1.75, WeightG: 1000},
+	}
+	app.server.reference = func(code string) (reference.Entry, bool) { e, ok := refs[code]; return e, ok }
+	alice := app.signup("alice@example.fr", "Alice")
+	bob := app.signup("bob@example.fr", "Bob")
+
+	// Deux produits saisis à la main, faux ; un troisième sans code-barre.
+	alice.post("/spools", newProductForm("ean", "6938936716785", "brand", "Inconnue", "color_name", "Noir", "quantity", "2"))
+	alice.post("/spools", newProductForm("ean", "5901234123457", "material", "PLA", "color_name", "Bleu canard"))
+	alice.post("/spools", newProductForm("color_name", "Sans code"))
+	products, _ := app.store.ListProducts(context.Background(), userID(t, app, "alice@example.fr"))
+	ids := map[string]string{}
+	for _, p := range products {
+		ids[p.ColorName] = strconv.FormatInt(p.ID, 10)
+	}
+
+	r := alice.get("/products/" + ids["Noir"])
+	for _, want := range []string{"Différences avec la référence", "Inconnue", "Galaxy Black", "Silk", "Resynchroniser avec la référence"} {
+		if !strings.Contains(r.Body, want) {
+			t.Errorf("fiche produit : %q absent", want)
+		}
+	}
+	if r := alice.get("/products/" + ids["Sans code"]); strings.Contains(r.Body, "Différences avec la référence") {
+		t.Error("un produit sans code-barre n'a pas d'écart")
+	}
+	r = alice.get("/products")
+	if strings.Count(r.Body, "≠ référence") != 2 || !strings.Contains(r.Body, "Resynchroniser ces produits") {
+		t.Error("la liste doit signaler les 2 produits divergents et proposer la resynchronisation groupée")
+	}
+
+	// Bob ne peut pas resynchroniser le produit d'Alice.
+	if r := bob.post("/products/"+ids["Noir"]+"/resync", nil); r.Status != http.StatusNotFound {
+		t.Errorf("resynchronisation par un tiers : %d", r.Status)
+	}
+
+	// Resynchronisation unitaire : remplacement intégral, code-barre conservé, bobines suivent.
+	alice.post("/products/"+ids["Noir"]+"/resync", nil)
+	noirID, _ := strconv.ParseInt(ids["Noir"], 10, 64)
+	p, _ := app.store.ProductByID(context.Background(), userID(t, app, "alice@example.fr"), noirID)
+	if p.Brand != "eSun" || p.Material != "PLA+" || p.ColorName != "Galaxy Black" || p.Finish != "silk" || p.ColorHex != "#1b1b1f" || p.EAN != "6938936716785" {
+		t.Errorf("produit resynchronisé : %+v", p.ProductFields)
+	}
+	if r := alice.get("/stock"); strings.Count(r.Body, "Galaxy Black") != 2 {
+		t.Error("les 2 bobines doivent refléter la référence")
+	}
+	if r := alice.get("/products/" + ids["Noir"]); strings.Contains(r.Body, "Différences avec la référence") {
+		t.Error("plus d'écart après resynchronisation")
+	}
+
+	// Resynchronisation groupée : le produit restant.
+	alice.post("/products/resync", nil)
+	if r := alice.get("/products"); strings.Contains(r.Body, "≠ référence") || !strings.Contains(r.Body, "Teal") {
+		t.Error("tous les produits divergents doivent être resynchronisés")
+	}
+	if r := alice.get("/products"); !strings.Contains(r.Body, "Sans code") {
+		t.Error("un produit sans code-barre ne doit pas être touché")
 	}
 }

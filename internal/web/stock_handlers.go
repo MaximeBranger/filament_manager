@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/MaximeBranger/filament_manager/internal/catalog"
+	"github.com/MaximeBranger/filament_manager/internal/reference"
 	"github.com/MaximeBranger/filament_manager/internal/stock"
 	"github.com/MaximeBranger/filament_manager/internal/store"
 )
@@ -179,15 +180,45 @@ func (s *Server) spoolNew(w http.ResponseWriter, r *http.Request) {
 		}
 		product = p
 	}
+	var ref *reference.Entry
 	if ean := r.URL.Query().Get("ean"); ean != "" {
-		form.Set("ean", ean)
+		// Code inconnu de l'utilisateur mais présent dans la référence : formulaire prérempli.
+		if e, ok := s.reference(ean); ok && product == nil {
+			for k, v := range referenceValues(e) {
+				form[k] = v
+			}
+			ref = &e
+		}
+		form.Set("ean", ean) // après la référence, qui n'en porte pas : le code scanné est conservé
 	}
-	s.renderSpoolForm(w, r, http.StatusOK, product, form, nil)
+	s.renderSpoolFormRef(w, r, http.StatusOK, product, form, nil, ref)
+}
+
+// referenceValues transpose une entrée de la référence en valeurs de formulaire produit.
+func referenceValues(e reference.Entry) url.Values {
+	return productValues(e.Fields(""))
+}
+
+// referenceDiffs renvoie l'entrée de référence d'un produit et ses écarts (nil si absent).
+func (s *Server) referenceDiffs(p store.ProductFields) (*reference.Entry, []reference.Difference) {
+	if p.EAN == "" {
+		return nil, nil
+	}
+	e, ok := s.reference(p.EAN)
+	if !ok {
+		return nil, nil
+	}
+	return &e, reference.Compare(p, e)
 }
 
 func (s *Server) renderSpoolForm(w http.ResponseWriter, r *http.Request, status int, product *store.Product, form url.Values, errs stock.Errors) {
+	s.renderSpoolFormRef(w, r, status, product, form, errs, nil)
+}
+
+// renderSpoolFormRef affiche le formulaire d'ajout ; ref signale un préremplissage depuis la référence.
+func (s *Server) renderSpoolFormRef(w http.ResponseWriter, r *http.Request, status int, product *store.Product, form url.Values, errs stock.Errors, ref *reference.Entry) {
 	user := currentUser(r)
-	data := map[string]any{"Title": "Ajouter des bobines", "Form": form, "Errors": errs, "Product": product}
+	data := map[string]any{"Title": "Ajouter des bobines", "Form": form, "Errors": errs, "Product": product, "Reference": ref}
 	if product == nil {
 		products, err := s.store.ListProducts(r.Context(), user.ID)
 		if err != nil {
@@ -350,7 +381,67 @@ func (s *Server) productList(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	s.render(w, r, http.StatusOK, "products", map[string]any{"Title": "Mes produits", "Products": products})
+	// Produits qui divergent de la référence : badge, et resynchronisation groupée.
+	diverging := map[int64]bool{}
+	for _, p := range products {
+		if _, diffs := s.referenceDiffs(p.ProductFields); len(diffs) > 0 {
+			diverging[p.ID] = true
+		}
+	}
+	s.render(w, r, http.StatusOK, "products", map[string]any{
+		"Title": "Mes produits", "Products": products, "Diverging": diverging,
+	})
+}
+
+// productResync remplace intégralement les informations d'un produit par la référence.
+func (s *Server) productResync(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r)
+	id, ok := pathID(r)
+	if !ok {
+		s.notFound(w, r)
+		return
+	}
+	p, err := s.store.ProductByID(r.Context(), user.ID, id)
+	if err != nil {
+		s.notFound(w, r)
+		return
+	}
+	e, diffs := s.referenceDiffs(p.ProductFields)
+	if e == nil || len(diffs) == 0 {
+		s.setFlash(w, "Ce produit est déjà conforme à la référence.")
+		http.Redirect(w, r, "/products/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+		return
+	}
+	if err := s.store.UpdateProduct(r.Context(), user.ID, id, e.Fields(p.EAN)); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.setFlash(w, "Produit resynchronisé avec la référence.")
+	http.Redirect(w, r, "/products/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+}
+
+// productResyncAll resynchronise tous les produits de l'utilisateur qui divergent de la référence.
+func (s *Server) productResyncAll(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r)
+	products, err := s.store.ListProducts(r.Context(), user.ID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	n := 0
+	for _, p := range products {
+		e, diffs := s.referenceDiffs(p.ProductFields)
+		if e == nil || len(diffs) == 0 {
+			continue
+		}
+		if err := s.store.UpdateProduct(r.Context(), user.ID, p.ID, e.Fields(p.EAN)); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		n++
+	}
+	s.setFlash(w, strconv.Itoa(n)+" "+pluralize(n, "produit resynchronisé", "produits resynchronisés")+" avec la référence.")
+	http.Redirect(w, r, "/products", http.StatusSeeOther)
 }
 
 func (s *Server) productEdit(w http.ResponseWriter, r *http.Request) {
@@ -374,8 +465,10 @@ func (s *Server) renderProductForm(w http.ResponseWriter, r *http.Request, statu
 		s.serverError(w, r, err)
 		return
 	}
+	ref, diffs := s.referenceDiffs(p.ProductFields)
 	s.render(w, r, status, "product_edit", map[string]any{
 		"Title": "Produit", "Product": p, "Form": form, "Errors": errs, "BrandSuggestions": brands,
+		"Reference": ref, "RefDiffs": diffs,
 	})
 }
 
@@ -455,7 +548,9 @@ func (s *Server) scanLookup(w http.ResponseWriter, r *http.Request) {
 	case err == nil:
 		http.Redirect(w, r, "/spools/new?product_id="+strconv.FormatInt(p.ID, 10), http.StatusSeeOther)
 	case errors.Is(err, store.ErrNotFound):
-		s.setFlash(w, "Code-barre inconnu : renseignez le produit une fois, il sera reconnu ensuite.")
+		if _, known := s.reference(ean); !known {
+			s.setFlash(w, "Code-barre inconnu : renseignez le produit une fois, il sera reconnu ensuite.")
+		}
 		http.Redirect(w, r, "/spools/new?ean="+url.QueryEscape(ean), http.StatusSeeOther)
 	default:
 		s.serverError(w, r, err)
@@ -479,6 +574,13 @@ func (s *Server) productLookup(w http.ResponseWriter, r *http.Request) {
 		}
 		if p != nil {
 			resp = map[string]any{"found": true, "product": productJSON{p.ID, p.Label(), stock.EffectiveHex(*p)}}
+		} else if e, ok := s.reference(ean); ok {
+			// Inconnu de l'utilisateur mais connu de la référence : valeurs pour préremplir.
+			values := map[string]string{}
+			for k, v := range referenceValues(e) {
+				values[k] = v[0]
+			}
+			resp = map[string]any{"found": false, "reference": values, "line": e.Line}
 		}
 	}
 	writeJSON(w, http.StatusOK, resp)

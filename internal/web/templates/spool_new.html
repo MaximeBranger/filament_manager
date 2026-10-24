@@ -20,6 +20,9 @@
     <p class="small"><a href="/spools/new">Choisir un autre produit</a> · <a href="/products/{{.Product.ID}}">Modifier ce produit</a></p>
   {{else}}
     <h2>Produit</h2>
+    {{with .Reference}}
+    <p class="notice small">Produit reconnu dans l'<a href="/credits">Open Filament Database</a>{{with .Line}} (gamme « {{.}} »){{end}} : vérifiez les informations avant d'enregistrer.</p>
+    {{end}}
     {{template "datalists" .}}
     {{template "product_fields" .}}
   {{end}}

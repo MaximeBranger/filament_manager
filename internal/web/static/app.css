@@ -351,3 +351,14 @@ section > h2 { margin-top: 1.5rem; }
 .hero h1 { font-size: 1.9rem; }
 .features { text-align: left; color: var(--muted); padding-left: 1.2rem; }
 .prose { max-width: 680px; }
+
+.license { white-space: pre-wrap; font-size: .8rem; background: var(--bg); padding: .75rem; border-radius: 8px; overflow-x: auto; }
+
+/* Écarts avec la référence ----------------------------------------------------------- */
+
+.ref-diff { border-color: color-mix(in srgb, var(--focus) 40%, var(--border)); }
+.ref-tag { color: var(--focus); border-color: color-mix(in srgb, var(--focus) 40%, var(--border)); }
+.diff-table { width: 100%; border-collapse: collapse; font-size: .9rem; margin: .5rem 0; }
+.diff-table th, .diff-table td { text-align: left; padding: .35rem .5rem; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+.diff-table thead th { border-top: 0; color: var(--muted); font-weight: 500; }
+.diff-table td:last-child { font-weight: 600; }

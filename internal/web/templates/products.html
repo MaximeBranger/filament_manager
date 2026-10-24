@@ -4,6 +4,13 @@
   <div class="actions"><a class="btn primary" href="/spools/new">Nouveau produit</a></div>
 </div>
 <p class="muted">Un produit est une référence (marque, matériau, couleur…). Le modifier met à jour toutes ses bobines.</p>
+{{with .Diverging}}
+<form method="post" action="/products/resync" class="card ref-diff inline-form"
+      data-confirm="Remplacer les informations de {{len .}} {{plural (len .) "produit" "produits"}} par celles de la référence ? Toutes leurs bobines sont concernées.">
+  <p class="small">{{len .}} {{plural (len .) "produit diffère" "produits diffèrent"}} de l'<a href="/credits">Open Filament Database</a> pour le même code-barre.</p>
+  <button class="btn primary">Resynchroniser {{plural (len .) "ce produit" "ces produits"}}</button>
+</form>
+{{end}}
 {{if .Products}}
 <ul class="spools">
   {{range .Products}}
@@ -13,6 +20,7 @@
       <strong>{{.ColorName}}</strong>
       <span class="muted">{{.Brand}} · {{materialText .}} · {{finishText .}} · {{weight .NominalWeightG}}{{with .EAN}} · {{.}}{{end}}</span>
     </a>
+    {{if index $.Diverging .ID}}<span class="tag ref-tag" title="Diffère de la référence pour ce code-barre">≠ référence</span>{{end}}
     <span class="count-badge">{{.SpoolCount}} {{plural .SpoolCount "bobine" "bobines"}}</span>
     <a class="btn small" href="/spools/new?product_id={{.ID}}" aria-label="Ajouter une bobine de ce produit">+</a>
   </li>
