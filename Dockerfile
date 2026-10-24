@@ -8,13 +8,15 @@ COPY . .
 ARG VERSION=dev
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" \
       -o /out/filamentmanager ./cmd/filamentmanager \
- && mkdir -p /out/data /out/backups
+ && mkdir -p /out/data /out/backups /out/shares
 
 # Image finale : binaire statique seul, sans shell, utilisateur non root (uid 65532).
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/filamentmanager /filamentmanager
 COPY --from=build --chown=65532:65532 /out/data /data
 COPY --from=build --chown=65532:65532 /out/backups /backups
+# Point de montage facultatif pour SHARE_DIR (volume dédié, hors sauvegardes).
+COPY --from=build --chown=65532:65532 /out/shares /shares
 ENV LISTEN_ADDR=:8080 \
     DATABASE_PATH=/data/app.db
 VOLUME ["/data", "/backups"]

@@ -7,7 +7,7 @@
 
 {{with .NewLink}}
 <div class="card highlight">
-  <h2>Lien du partage</h2>
+  <h2>Lien du partage « {{$.NewTitle}} »</h2>
   <p class="small">Il n'est affiché <strong>qu'une seule fois</strong> : copiez-le maintenant.{{if $.NewWithPassword}} Transmettez le mot de passe par un autre canal que le lien.{{end}}</p>
   <div class="inline-form">
     <input id="share-link" value="{{.}}" readonly aria-label="Lien du partage">
@@ -19,14 +19,18 @@
 {{if .Shares}}
 {{range .Shares}}
 <div class="card share-card">
-  <div class="share-title">
-    <h2>{{.Title}}</h2>
-    <span class="muted small">{{.File.OriginalName}} · {{mm .File.SizeX}} × {{mm .File.SizeY}} × {{mm .File.SizeZ}} mm · expire le {{date .ExpiresAt}}</span>
-    <span>
-      {{if .HasPassword}}<span class="tag">Mot de passe</span>{{else}}<span class="tag">Lien seul</span>{{end}}
-      {{if .Locked}}<span class="tag danger-tag">Verrouillé</span>{{end}}
+  <a class="share-head-link" href="/shares/{{.ID}}/preview">
+    <img class="share-thumb" src="/shares/{{.ID}}/thumb" alt="" width="96" height="96" loading="lazy">
+    <span class="share-title">
+      <span class="share-name">{{.Title}}</span>
+      <span class="muted small">{{.File.OriginalName}} · {{mm .File.SizeX}} × {{mm .File.SizeY}} × {{mm .File.SizeZ}} mm</span>
+      <span class="muted small">Expire le {{date .ExpiresAt}}</span>
+      <span>
+        {{if .HasPassword}}<span class="tag">Mot de passe</span>{{else}}<span class="tag">Lien seul</span>{{end}}
+        {{if .Locked}}<span class="tag danger-tag">Verrouillé</span>{{end}}
+      </span>
     </span>
-  </div>
+  </a>
 
   {{with .Choice}}
   <div class="choice">

@@ -136,6 +136,14 @@ func (s *Server) exportJSON(w http.ResponseWriter, r *http.Request) {
 	enc.Encode(out)
 }
 
+// csvSafe neutralise les textes saisis qu'un tableur interpréterait comme une formule.
+func csvSafe(v string) string {
+	if v != "" && strings.ContainsRune("=+-@\t\r", rune(v[0])) {
+		return "'" + v
+	}
+	return v
+}
+
 func (s *Server) exportCSV(w http.ResponseWriter, r *http.Request) {
 	spools, err := s.store.ListSpools(r.Context(), currentUser(r).ID)
 	if err != nil {
@@ -168,10 +176,10 @@ func (s *Server) exportCSV(w http.ResponseWriter, r *http.Request) {
 		if sp.Hidden {
 			hidden = "oui"
 		}
-		cw.Write([]string{strconv.FormatInt(sp.ID, 10), p.Brand, material, p.ColorName, family.Label,
-			stock.EffectiveHex(p), finish, strings.Replace(strconv.FormatFloat(p.DiameterMM, 'f', 2, 64), ".", ",", 1),
-			strconv.Itoa(p.NominalWeightG), p.EAN, catalog.LevelLabel(sp.Level), sp.PurchaseDate, price,
-			sp.Supplier, sp.Notes, hidden})
+		cw.Write([]string{strconv.FormatInt(sp.ID, 10), csvSafe(p.Brand), csvSafe(material), csvSafe(p.ColorName), family.Label,
+			stock.EffectiveHex(p), csvSafe(finish), strings.Replace(strconv.FormatFloat(p.DiameterMM, 'f', 2, 64), ".", ",", 1),
+			strconv.Itoa(p.NominalWeightG), csvSafe(p.EAN), catalog.LevelLabel(sp.Level), sp.PurchaseDate, price,
+			csvSafe(sp.Supplier), csvSafe(sp.Notes), hidden})
 	}
 	cw.Flush()
 }

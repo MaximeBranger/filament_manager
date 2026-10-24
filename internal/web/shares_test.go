@@ -88,8 +88,9 @@ func TestShareCreateViewAndChoose(t *testing.T) {
 	stockForSharing(alice)
 	path := alice.createShare("Benchy", "")
 
+	// Un maillage converti et sa miniature, jamais le STL d'origine.
 	files := shareFiles(t, app)
-	if len(files) != 1 || !strings.HasSuffix(files[0], ".fmm") {
+	if len(files) != 2 || !strings.HasSuffix(files[0], ".fmm") || files[1] != strings.TrimSuffix(files[0], ".fmm")+".png" {
 		t.Fatalf("fichiers stockés : %v", files)
 	}
 	stored, _ := os.ReadFile(filepath.Join(app.cfg.ShareDir, files[0]))
@@ -343,5 +344,56 @@ func TestAccountDeletionRemovesShareFiles(t *testing.T) {
 	alice.post("/account/delete", url.Values{"confirm_email": {"alice@example.fr"}})
 	if files := shareFiles(t, app); len(files) != 0 {
 		t.Errorf("fichiers conservés après suppression du compte : %v", files)
+	}
+}
+
+func TestShareUploadConcurrencyLimit(t *testing.T) {
+	app := newTestApp(t)
+	alice := app.signup("alice@example.fr", "Alice")
+	// Simule des conversions en cours sur tous les créneaux.
+	for range cap(app.server.uploadSlots) {
+		app.server.uploadSlots <- struct{}{}
+	}
+	if r := alice.upload("/shares", nil, "x.stl", testSTL(1)); r.Status != http.StatusServiceUnavailable {
+		t.Errorf("envoi au-delà de la limite : %d", r.Status)
+	}
+	<-app.server.uploadSlots
+	if r := alice.upload("/shares", nil, "x.stl", testSTL(1)); r.Status != http.StatusOK {
+		t.Errorf("envoi après libération d'un créneau : %d", r.Status)
+	}
+}
+
+func TestShareThumbnail(t *testing.T) {
+	app := newTestApp(t)
+	alice := app.signup("alice@example.fr", "Alice")
+	bob := app.signup("bob@example.fr", "Bob")
+	alice.createShare("Benchy", "")
+	shares, _ := app.store.ListShares(context.Background(), userID(t, app, "alice@example.fr"))
+	thumb := "/shares/" + strconv.FormatInt(shares[0].ID, 10) + "/thumb"
+
+	r := alice.get(thumb)
+	if r.Status != http.StatusOK || r.Header.Get("Content-Type") != "image/png" || !strings.HasPrefix(r.Body, "\x89PNG") {
+		t.Fatalf("miniature : %d %s", r.Status, r.Header.Get("Content-Type"))
+	}
+	if r := bob.get(thumb); r.Status != http.StatusNotFound {
+		t.Errorf("Bob voit la miniature d'Alice : %d", r.Status)
+	}
+	if r := alice.get("/shares"); !strings.Contains(r.Body, `src="`+thumb+`"`) || !strings.Contains(r.Body, `<span class="share-name">Benchy</span>`) {
+		t.Error("la liste doit afficher miniature et titre")
+	}
+
+	// Miniature absente (partage antérieur) : régénérée à la demande.
+	os.Remove(filepath.Join(app.cfg.ShareDir, strings.TrimSuffix(shares[0].File.StorageKey, ".fmm")+".png"))
+	if r := alice.get(thumb); r.Status != http.StatusOK || !strings.HasPrefix(r.Body, "\x89PNG") {
+		t.Errorf("régénération : %d", r.Status)
+	}
+	if len(shareFiles(t, app)) != 2 {
+		t.Error("la miniature régénérée doit être enregistrée")
+	}
+
+	// La révocation efface aussi la miniature.
+	alice.post("/shares/"+strconv.FormatInt(shares[0].ID, 10)+"/revoke", nil)
+	if files := shareFiles(t, app); len(files) != 0 {
+		t.Errorf("fichiers restants : %v", files)
 	}
 }

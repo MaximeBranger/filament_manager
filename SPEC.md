@@ -434,13 +434,13 @@ Permet d'envoyer un modèle 3D à **n'importe qui** (sans compte) via un lien, p
 **Principe directeur : ce n'est jamais un outil de stockage de STL.** Un partage vit 7 jours, puis tout est supprimé (fichier, partage, choix). Le STL d'origine n'est jamais conservé : seul un maillage converti l'est, le temps du partage.
 
 ### 9.1 Création (utilisateur connecté)
-- Écran « Partages » : liste des partages actifs (titre, expiration, mot de passe oui/non, verrouillé, choix du destinataire), bouton « Nouveau partage ».
+- Écran « Partages » : liste des partages actifs (miniature et titre cliquables vers l'aperçu, fichier et dimensions, expiration, mot de passe oui/non, verrouillé, choix du destinataire), bouton « Nouveau partage ». Le lien affiché après création rappelle le titre.
 - Formulaire : fichier STL (un seul), titre (prérempli avec le nom du fichier), mot de passe facultatif (≥ 6 caractères).
 - Avertissement affiché à la création : « Le destinataire peut techniquement récupérer le modèle 3D. »
 - Durée **fixe de 7 jours**, non prolongeable (recréer un partage si besoin).
 - Après création : affichage du lien `BASE_URL/share/<token>` à copier (jeton 32 octets, montré une seule fois, stocké hashé — comme les invitations) et rappel de transmettre le mot de passe par un autre canal.
 - Actions sur un partage : prévisualiser (vue destinataire), définir / changer / retirer le mot de passe, **révoquer** (suppression immédiate du fichier et du partage).
-- Limites : `SHARE_MAX_ACTIVE` partages actifs par utilisateur (défaut 5), `SHARE_MAX_FILE_SIZE` par fichier (défaut 50 Mo).
+- Limites : `SHARE_MAX_ACTIVE` partages actifs par utilisateur (défaut 5), `SHARE_MAX_FILE_SIZE` par fichier (défaut 50 Mo), 2 conversions simultanées au plus sur le serveur (chacune lit le fichier en mémoire ; au-delà : « réessayez dans un instant »).
 
 ### 9.2 Traitement du STL
 À l'envoi, le serveur lit le fichier en mémoire (`http.MaxBytesReader`) et **le convertit** ; tout échec = rejet avec message explicite, rien n'est écrit.
@@ -448,6 +448,7 @@ Permet d'envoyer un modèle 3D à **n'importe qui** (sans compte) via un lien, p
 - Validation : au moins 1 triangle, au plus **1 000 000** triangles, coordonnées finies (pas de NaN / Inf). Unité supposée : mm.
 - Normalisation : recentrage en X/Y, Z minimum ramené à 0. Calcul des dimensions (boîte englobante, mm).
 - Écriture d'un maillage binaire compact propre à l'application (en-tête `FMM1`, nombre de triangles, positions `float32` non indexées ; normales recalculées côté navigateur) dans `SHARE_DIR/<storage_key>`, via fichier temporaire + renommage.
+- Miniature PNG 256 × 256 (`SHARE_DIR/<storage_key>.png`) : vue isométrique en couleur neutre, rendue en Go pur (tampon de profondeur, anticrénelage 2×). Créée avec le partage, régénérée à la demande si absente, effacée avec lui. Visible du créateur seulement.
 - Le fichier envoyé par l'utilisateur n'est **jamais** renvoyé tel quel au navigateur.
 
 ### 9.3 Couleurs proposées
@@ -499,7 +500,7 @@ Calculées **en direct à chaque affichage** à partir du stock du créateur :
 | GET | `/shares`, `/shares/new` | connecté |
 | POST | `/shares` (multipart) | connecté |
 | POST | `/shares/{id}/password`, `/shares/{id}/revoke` | connecté, propriétaire |
-| GET | `/shares/{id}/preview`, `/shares/{id}/file` | connecté, propriétaire (aperçu : le lien public n'est plus connu après sa création) |
+| GET | `/shares/{id}/preview`, `/shares/{id}/file`, `/shares/{id}/thumb` | connecté, propriétaire (aperçu : le lien public n'est plus connu après sa création) |
 | GET | `/share/{token}` | public (+ cookie si mot de passe) |
 | POST | `/share/{token}/unlock` | public |
 | GET | `/share/{token}/files/{fileID}` | public (+ cookie si mot de passe) |
@@ -545,7 +546,8 @@ v1c ajoutera `internal/share/` (lecture / validation / conversion STL, mot de pa
 - **CSRF** : cookie `SameSite=Lax` + `http.CrossOriginProtection` de la bibliothèque standard (Go ≥ 1.25), qui rejette les requêtes non sûres cross-origin d'après `Sec-Fetch-Site` / `Origin`. Pas de jeton à propager dans les formulaires. `BASE_URL` est déclarée origine de confiance ; Nginx Proxy Manager doit transmettre l'en-tête `Host` d'origine (comportement par défaut).
 - En-têtes : `Content-Security-Policy` stricte (`default-src 'self'`, + origine Plausible si activé), `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `Permissions-Policy: camera=(self)`.
 - Jetons (session, lien magique, invitation, partage) : 32 octets `crypto/rand`, stockés hashés (SHA-256), comparaison en temps constant.
-- Aucune donnée personnelle dans les URL suivies par Plausible. Les pages `/share/<token>` sont remontées sous l'URL générique `/share/*` : le jeton ne part jamais chez Plausible.
+- Aucune donnée personnelle dans les URL suivies par Plausible. Les pages dont l'URL porte un jeton (`/share/<token>`, `/invite/<token>`, `/auth/verify?t=…`) sont remontées sous une URL générique (`/share/*`, `/invite/*`, `/auth/verify`) via le script manuel de Plausible : le jeton n'en part jamais. La règle est appliquée au rendu, d'après le chemin, pour toute page.
+- Export CSV : les cellules commençant par `=`, `+`, `-`, `@` sont préfixées d'une apostrophe (pas d'exécution de formule dans un tableur).
 - Pages de partage (v1c) : seule surface publique de l'application, règles spécifiques au §9.
 
 ### 10.4 Sauvegardes

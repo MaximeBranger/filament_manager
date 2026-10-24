@@ -52,8 +52,10 @@ async function main() {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
   const scene = new THREE.Scene();
-  let dark = false;
-  scene.background = new THREE.Color(BACKGROUNDS.light);
+  // Le fond suit le thème du système ; le bouton permet de basculer.
+  let dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  bgButton.textContent = dark ? 'Fond clair' : 'Fond sombre';
+  scene.background = new THREE.Color(dark ? BACKGROUNDS.dark : BACKGROUNDS.light);
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 

@@ -4,16 +4,18 @@
   --text: #1c1b1a;
   --muted: #6b6762;
   --border: #e2dfda;
-  --accent: #e8590c;
+  /* Couleurs de texte et de fond choisies pour un contraste ≥ 4,5:1 (WCAG AA).
+     L'orange de marque (#e8590c, icônes) est trop clair pour porter du texte blanc. */
+  --accent: #c2410c;
   --accent-text: #ffffff;
   --danger: #c92a2a;
   --focus: #1971c2;
   --radius: 10px;
-  --lvl-new: #2b8a3e;
-  --lvl-started: #5c940d;
-  --lvl-half: #e67700;
-  --lvl-low: #d9480f;
-  --lvl-empty: #868e96;
+  --lvl-new: #2f7a3a;
+  --lvl-started: #4d7c0f;
+  --lvl-half: #b35c00;
+  --lvl-low: #c2410c;
+  --lvl-empty: #6c7178;
   color-scheme: light;
 }
 
@@ -28,6 +30,11 @@
     --accent-text: #1c1b1a;
     --danger: #ff6b6b;
     --focus: #74c0fc;
+    --lvl-new: #69db7c;
+    --lvl-started: #94d82d;
+    --lvl-half: #ffa94d;
+    --lvl-low: #ff8a5b;
+    --lvl-empty: #adb5bd;
     color-scheme: dark;
   }
 }
@@ -290,8 +297,14 @@ section > h2 { margin-top: 1.5rem; }
 
 /* Partages 3D ------------------------------------------------------------------ */
 
-.share-card h2 { margin: 0; }
-.share-title { display: flex; flex-direction: column; gap: .25rem; margin-bottom: .75rem; }
+.share-head-link { display: flex; gap: .9rem; align-items: center; margin-bottom: .75rem; text-decoration: none; color: inherit; }
+.share-head-link:hover .share-name { text-decoration: underline; }
+.share-thumb {
+  flex: none; width: 96px; height: 96px; border-radius: 8px; object-fit: contain;
+  background: var(--bg); border: 1px solid var(--border);
+}
+.share-title { display: flex; flex-direction: column; gap: .2rem; min-width: 0; }
+.share-name { font-size: 1.15rem; font-weight: 700; overflow-wrap: anywhere; }
 .danger-tag { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
 .choice { display: flex; gap: .75rem; align-items: flex-start; padding: .6rem; background: var(--bg); border-radius: 8px; }
 .share-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: .75rem; }
@@ -301,12 +314,12 @@ section > h2 { margin-top: 1.5rem; }
 .share-head h1 { margin-bottom: .25rem; }
 .viewer {
   position: relative; width: 100%; aspect-ratio: 4 / 3; max-height: 70vh;
-  border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: #f2f0ed;
+  border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--bg);
 }
 .viewer canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .viewer-status {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  margin: 0; color: #6b6762; text-align: center; padding: 1rem;
+  margin: 0; color: var(--muted); text-align: center; padding: 1rem;
 }
 .viewer-tools { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin: .6rem 0 .25rem; }
 .swatches { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); margin-bottom: 1rem; }

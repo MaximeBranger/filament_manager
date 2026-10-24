@@ -167,6 +167,7 @@ func (s *Server) renderBlock(w http.ResponseWriter, r *http.Request, status int,
 	if s.cfg.PlausibleEnabled() {
 		data["PlausibleURL"] = s.cfg.PlausibleURL
 		data["PlausibleDomain"] = s.cfg.PlausibleDomain
+		data["TrackAs"] = genericTrackingURL(r)
 	}
 	var buf bytes.Buffer
 	if err := pt.t.ExecuteTemplate(&buf, block, data); err != nil {
@@ -176,6 +177,21 @@ func (s *Server) renderBlock(w http.ResponseWriter, r *http.Request, status int,
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	buf.WriteTo(w)
+}
+
+// genericTrackingURL renvoie l'URL à déclarer à Plausible pour une page dont l'adresse contient
+// un jeton secret, ou "" pour le suivi normal.
+func genericTrackingURL(r *http.Request) string {
+	p := r.URL.Path
+	switch {
+	case strings.HasPrefix(p, "/share/"):
+		return "/share/*"
+	case strings.HasPrefix(p, "/invite/"):
+		return "/invite/*"
+	case p == "/auth/verify":
+		return "/auth/verify"
+	}
+	return ""
 }
 
 func (s *Server) serverError(w http.ResponseWriter, r *http.Request, err error) {

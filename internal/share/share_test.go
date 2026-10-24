@@ -1,8 +1,10 @@
 package share
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
+	"image/png"
 	"math"
 	"os"
 	"path/filepath"
@@ -154,5 +156,34 @@ func TestFiles(t *testing.T) {
 	}
 	if err := Remove(dir, key); err != nil {
 		t.Error("supprimer un fichier absent ne doit pas échouer")
+	}
+}
+
+func TestRenderThumbnail(t *testing.T) {
+	m, err := ParseSTL(binarySTL("", cubeCorner, [9]float32{30, 60, 15, 10, 60, 15, 30, 20, 5}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := RenderThumbnail(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil || img.Bounds().Dx() != ThumbSize {
+		t.Fatalf("miniature : %v %v", err, img.Bounds())
+	}
+	opaque := 0
+	for y := range ThumbSize {
+		for x := range ThumbSize {
+			if _, _, _, a := img.At(x, y).RGBA(); a > 0 {
+				opaque++
+			}
+		}
+	}
+	if opaque == 0 || opaque == ThumbSize*ThumbSize {
+		t.Errorf("miniature vide ou pleine : %d pixels dessinés", opaque)
+	}
+	if ThumbKey("0123456789abcdef0123456789abcdef.fmm") != "0123456789abcdef0123456789abcdef.png" {
+		t.Error("ThumbKey")
 	}
 }

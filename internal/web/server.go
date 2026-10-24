@@ -37,6 +37,8 @@ type Server struct {
 	webauthn    *webauthn.WebAuthn
 	ceremonies  *ceremonies
 	passkeyRate *auth.RateLimiter
+	// uploadSlots borne les conversions de STL simultanées (chacune lit le fichier en mémoire).
+	uploadSlots chan struct{}
 	csp         string
 	syncMail    bool // envoi synchrone des emails de notification (tests)
 }
@@ -56,6 +58,7 @@ func New(cfg *config.Config, st *store.Store, mailer mail.Mailer, log *slog.Logg
 
 		ceremonies:  &ceremonies{m: map[string]ceremony{}},
 		passkeyRate: auth.NewRateLimiter(30, 15*time.Minute),
+		uploadSlots: make(chan struct{}, maxConcurrentUploads),
 	}
 	wa, err := webauthn.New(&webauthn.Config{
 		RPID:          cfg.WebAuthnRPID,
@@ -159,6 +162,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /shares/{id}/revoke", user(s.shareRevoke))
 	mux.Handle("GET /shares/{id}/preview", user(s.sharePreview))
 	mux.Handle("GET /shares/{id}/file", user(s.shareOwnerFile))
+	mux.Handle("GET /shares/{id}/thumb", user(s.shareThumb))
 	mux.Handle("GET /share/{token}", publicShare(s.sharePage))
 	mux.Handle("POST /share/{token}/unlock", publicShare(s.shareUnlock))
 	mux.Handle("GET /share/{token}/files/{fileID}", publicShare(s.shareFile))

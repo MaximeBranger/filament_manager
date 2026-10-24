@@ -32,25 +32,29 @@ type testApp struct {
 	cfg    *config.Config
 }
 
-func newTestApp(t *testing.T) *testApp {
+func newTestApp(t *testing.T) *testApp { return newTestAppEnv(t, nil) }
+
+// newTestAppEnv permet de compléter ou remplacer la configuration de test.
+func newTestAppEnv(t *testing.T, extra map[string]string) *testApp {
 	t.Helper()
 	conn, err := db.Open(context.Background(), filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { conn.Close() })
-	shareDir := t.TempDir()
-	cfg, err := config.Load(func(k string) string {
-		return map[string]string{
-			"BASE_URL":            "http://filaments.test",
-			"SESSION_SECRET":      strings.Repeat("s", 32),
-			"SMTP_HOST":           "smtp.test",
-			"SMTP_FROM":           "FilamentManager <noreply@filaments.test>",
-			"SHARE_DIR":           shareDir,
-			"SHARE_MAX_FILE_SIZE": "4KB",
-			"TRUSTED_PROXIES":     "127.0.0.1", // permet de simuler plusieurs IP via X-Forwarded-For
-		}[k]
-	})
+	env := map[string]string{
+		"BASE_URL":            "http://filaments.test",
+		"SESSION_SECRET":      strings.Repeat("s", 32),
+		"SMTP_HOST":           "smtp.test",
+		"SMTP_FROM":           "FilamentManager <noreply@filaments.test>",
+		"SHARE_DIR":           t.TempDir(),
+		"SHARE_MAX_FILE_SIZE": "4KB",
+		"TRUSTED_PROXIES":     "127.0.0.1", // permet de simuler plusieurs IP via X-Forwarded-For
+	}
+	for k, v := range extra {
+		env[k] = v
+	}
+	cfg, err := config.Load(func(k string) string { return env[k] })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -661,5 +665,38 @@ func TestPWA(t *testing.T) {
 	}
 	if r := c.get("/stock"); !strings.Contains(r.Body, `rel="manifest"`) {
 		t.Error("lien vers le manifeste absent")
+	}
+}
+
+func TestPlausibleNeverSeesTokens(t *testing.T) {
+	app := newTestAppEnv(t, map[string]string{"PLAUSIBLE_URL": "https://stats.example.fr", "PLAUSIBLE_DOMAIN": "filaments.test"})
+	alice := app.signup("alice@example.fr", "Alice")
+
+	if r := alice.get("/stock"); !strings.Contains(r.Body, "https://stats.example.fr/js/script.js") {
+		t.Error("suivi normal attendu sur les pages ordinaires")
+	}
+	invite := inviteRe.FindString(alice.post("/friends/invitations", nil).Body)
+	shareRe := regexp.MustCompile(`/share/[A-Za-z0-9_-]+`)
+	share := shareRe.FindString(alice.upload("/shares", map[string]string{"title": "x"}, "x.stl", testSTL(1)).Body)
+	token, _ := app.newClient().loginEmail("alice@example.fr")
+
+	for path, generic := range map[string]string{invite: "/invite/*", share: "/share/*", "/auth/verify?t=" + token: "/auth/verify"} {
+		body := alice.get(path).Body
+		if !strings.Contains(body, "script.manual.js") || !strings.Contains(body, `data-url="`+generic+`"`) {
+			t.Errorf("%s : suivi générique %q attendu", generic, generic)
+		}
+		if strings.Contains(body, "/js/script.js") {
+			t.Errorf("%s : le suivi automatique enverrait l'URL avec son jeton", generic)
+		}
+	}
+}
+
+func TestCSVExportNeutralizesFormulas(t *testing.T) {
+	app := newTestApp(t)
+	c := app.signup("csv@example.fr", "Csv")
+	c.post("/spools", newProductForm("brand", "=cmd|' /C calc'!A0", "notes", `=HYPERLINK("http://evil")`))
+	body := c.get("/account/export.csv").Body
+	if !strings.Contains(body, `'=cmd`) || !strings.Contains(body, `'=HYPERLINK`) {
+		t.Errorf("formules non neutralisées :\n%s", body)
 	}
 }

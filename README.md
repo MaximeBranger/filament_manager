@@ -1,12 +1,18 @@
 # FilamentManager
 
-Application web ultra légère pour suivre son stock de bobines de filament 3D : liste, recherche par couleur, scan des codes-barres, et bientôt partage entre amis.
+Application web ultra légère pour suivre son stock de bobines de filament 3D.
+
+- **Stock** : une ligne par bobine, niveau de remplissage, recherche texte, filtres, recherche par couleur proche (ΔE2000).
+- **Scan** des codes-barres des boîtes, à l'unité ou en série à la réception.
+- **Amis** : consultation du stock des amis, prêts et dons de bobines, notifications.
+- **Partage de modèles 3D** : un lien temporaire montre un STL dans les couleurs de votre stock, le destinataire choisit la sienne.
+- **Connexion** sans mot de passe (lien ou code par email, passkeys). Application installable (PWA).
 
 La spécification complète est dans [SPEC.md](SPEC.md).
 
 ## Stack
 
-Go (bibliothèque standard + `modernc.org/sqlite`), rendu serveur avec `html/template` et htmx, SQLite. Un seul binaire statique, une image Docker d'environ 16 Mo.
+Go (bibliothèque standard, `modernc.org/sqlite`, `go-webauthn`), rendu serveur avec `html/template` et htmx, SQLite, Three.js pour l'aperçu 3D. Un seul binaire statique, une image Docker d'environ 21 Mo.
 
 ## Développement
 
@@ -43,18 +49,23 @@ docker run -d --name filament-manager \
   -p 8080:8080 \
   -v filament-data:/data \
   -v filament-backups:/backups \
+  -v filament-shares:/shares \
   -e BASE_URL=https://filaments.example.fr \
   -e SESSION_SECRET=... \
   -e SMTP_HOST=... -e SMTP_USER=... -e SMTP_PASSWORD=... \
   -e SMTP_FROM='FilamentManager <noreply@example.fr>' \
   -e BACKUP_DIR=/backups \
+  -e SHARE_DIR=/shares \
   -e TRUSTED_PROXIES=172.18.0.0/16 \
   <nexus>/<repo>/filament-manager:<tag>
 ```
 
-- **Une seule instance** à la fois : c'est une contrainte de SQLite.
+- **Une seule instance** à la fois : c'est une contrainte de SQLite. Les défis de passkeys et les limites de tentatives sont aussi gardés en mémoire.
 - **TLS** : il est terminé par Nginx Proxy Manager. `TRUSTED_PROXIES` doit contenir son IP ou son sous-réseau Docker.
+- **Taille des envois** : NPM limite le corps des requêtes à environ 1 Mo par défaut. Pour envoyer des STL, ajoutez dans la configuration avancée du proxy host `client_max_body_size 51m;` (au-dessus de `SHARE_MAX_FILE_SIZE`).
 - **Sauvegardes** : une copie cohérente de la base est écrite dans `/backups` au démarrage, puis toutes les `BACKUP_INTERVAL`. C'est ce dossier que la sauvegarde externe doit récupérer.
+- **Modèles 3D partagés** : `SHARE_DIR` sur un volume dédié, à exclure des sauvegardes (les partages ne vivent que 7 jours).
+- **Passkeys** : elles sont liées au domaine (`WEBAUTHN_RP_ID`, par défaut celui de `BASE_URL`). Changer de domaine les rend inutilisables ; le lien par email reste disponible.
 - **Santé** : `/healthz` (processus) et `/readyz` (base de données). L'image embarque un `HEALTHCHECK`.
 
 ## CI

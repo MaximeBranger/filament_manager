@@ -24,24 +24,84 @@ const (
 	maxChoiceMessage  = 500
 	maxPasswordLength = 200
 	sharePurgeEvery   = 15 * time.Minute
+
+	maxConcurrentUploads = 2
 )
 
 // Créateur -------------------------------------------------------------------------------
 
 func (s *Server) sharesPage(w http.ResponseWriter, r *http.Request) {
-	s.renderShares(w, r, "", false)
+	s.renderShares(w, r, "", "", false)
 }
 
-func (s *Server) renderShares(w http.ResponseWriter, r *http.Request, newLink string, withPassword bool) {
+// renderShares affiche la liste ; newLink (affiché une seule fois) et newTitle décrivent le
+// partage qui vient d'être créé.
+func (s *Server) renderShares(w http.ResponseWriter, r *http.Request, newLink, newTitle string, withPassword bool) {
 	shares, err := s.store.ListShares(r.Context(), currentUser(r).ID)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
 	s.render(w, r, http.StatusOK, "shares", map[string]any{
-		"Title": "Partages", "Shares": shares, "NewLink": newLink, "NewWithPassword": withPassword,
-		"MaxActive": s.cfg.ShareMaxActive,
+		"Title": "Partages", "Shares": shares, "NewLink": newLink, "NewTitle": newTitle,
+		"NewWithPassword": withPassword, "MaxActive": s.cfg.ShareMaxActive,
 	})
+}
+
+// shareThumb sert la miniature d'un partage (créateur uniquement). Les partages créés avant
+// l'ajout des miniatures en reçoivent une à la première demande.
+func (s *Server) shareThumb(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		s.notFound(w, r)
+		return
+	}
+	sh, err := s.store.ShareByID(r.Context(), currentUser(r).ID, id)
+	if err != nil {
+		s.notFound(w, r)
+		return
+	}
+	thumbKey := share.ThumbKey(sh.File.StorageKey)
+	f, err := share.Open(s.cfg.ShareDir, thumbKey)
+	if err != nil {
+		data, err := s.renderStoredThumbnail(sh.File.StorageKey)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Cache-Control", "private, max-age=3600")
+		w.Write(data)
+		return
+	}
+	defer f.Close()
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	io.Copy(w, f)
+}
+
+func (s *Server) renderStoredThumbnail(meshKey string) ([]byte, error) {
+	f, err := share.Open(s.cfg.ShareDir, meshKey)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := io.ReadAll(f)
+	f.Close()
+	if err != nil {
+		return nil, err
+	}
+	mesh, err := share.DecodeFMM(raw)
+	if err != nil {
+		return nil, err
+	}
+	data, err := share.RenderThumbnail(mesh)
+	if err != nil {
+		return nil, err
+	}
+	if err := share.Write(s.cfg.ShareDir, share.ThumbKey(meshKey), data); err != nil {
+		s.log.Error("écriture de la miniature", "err", err)
+	}
+	return data, nil
 }
 
 func (s *Server) shareNew(w http.ResponseWriter, r *http.Request) {
@@ -58,6 +118,13 @@ func (s *Server) renderShareForm(w http.ResponseWriter, r *http.Request, status 
 // shareCreate lit le formulaire multipart en mémoire : le STL n'est jamais écrit tel quel.
 func (s *Server) shareCreate(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
+	select {
+	case s.uploadSlots <- struct{}{}:
+		defer func() { <-s.uploadSlots }()
+	default:
+		s.renderShareForm(w, r, http.StatusServiceUnavailable, "", "Le serveur traite déjà d'autres modèles : réessayez dans un instant.")
+		return
+	}
 	http.NewResponseController(w).SetReadDeadline(time.Now().Add(10 * time.Minute))
 	r.Body = http.MaxBytesReader(w, r.Body, s.cfg.ShareMaxFileSize+1<<20)
 
@@ -153,13 +220,18 @@ func (s *Server) shareCreate(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	if thumb, err := share.RenderThumbnail(mesh); err != nil {
+		s.log.Error("miniature du partage", "err", err) // non bloquant : régénérée à la demande
+	} else if err := share.Write(s.cfg.ShareDir, share.ThumbKey(key), thumb); err != nil {
+		s.log.Error("écriture de la miniature", "err", err)
+	}
 	token := auth.NewToken()
 	_, err = s.store.CreateShare(r.Context(), user.ID, auth.HashToken(token), title, passwordHash, store.ShareFile{
 		OriginalName: filename, StorageKey: key, Triangles: mesh.Triangles(),
 		SizeX: mesh.Size[0], SizeY: mesh.Size[1], SizeZ: mesh.Size[2], Bytes: int64(len(encoded)),
 	}, s.cfg.ShareMaxActive, shareTTL)
 	if err != nil {
-		share.Remove(s.cfg.ShareDir, key)
+		s.removeShareFiles([]string{key})
 		if errors.Is(err, store.ErrTooManyShares) {
 			s.renderShareForm(w, r, http.StatusConflict, title, "Nombre maximal de partages actifs atteint.")
 			return
@@ -168,7 +240,7 @@ func (s *Server) shareCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.Info("partage créé", "user_id", user.ID, "triangles", mesh.Triangles())
-	s.renderShares(w, r, s.cfg.BaseURL.String()+"/share/"+token, passwordHash != "")
+	s.renderShares(w, r, s.cfg.BaseURL.String()+"/share/"+token, title, passwordHash != "")
 }
 
 func (s *Server) sharePassword(w http.ResponseWriter, r *http.Request) {
@@ -270,7 +342,7 @@ func publicShare(next http.HandlerFunc) http.Handler {
 
 func (s *Server) shareUnavailable(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, http.StatusNotFound, "error", map[string]any{
-		"Title": "Partage indisponible", "Message": "Ce partage n'est plus disponible.", "ShareTracking": true,
+		"Title": "Partage indisponible", "Message": "Ce partage n'est plus disponible.",
 	})
 }
 
@@ -321,7 +393,6 @@ func (s *Server) sharePage(w http.ResponseWriter, r *http.Request) {
 func (s *Server) renderSharePassword(w http.ResponseWriter, r *http.Request, status int, sh *store.Share, errMsg string) {
 	s.render(w, r, status, "share_password", map[string]any{
 		"Title": "Partage protégé", "Token": r.PathValue("token"), "Locked": sh.Locked(), "Error": errMsg,
-		"ShareTracking": true,
 	})
 }
 
@@ -497,16 +568,19 @@ func (s *Server) renderViewer(w http.ResponseWriter, r *http.Request, sh *store.
 	}
 	s.render(w, r, http.StatusOK, "share_view", map[string]any{
 		"Title": sh.Title, "Share": sh, "Swatches": swatches, "Selected": selected, "Preview": preview,
-		"MeshURL": meshURL, "ChoiceAction": choiceAction, "ShareTracking": !preview,
+		"MeshURL": meshURL, "ChoiceAction": choiceAction,
 	})
 }
 
 // Purge ----------------------------------------------------------------------------------
 
+// removeShareFiles efface les maillages et leurs miniatures.
 func (s *Server) removeShareFiles(keys []string) {
 	for _, k := range keys {
-		if err := share.Remove(s.cfg.ShareDir, k); err != nil {
-			s.log.Error("suppression d'un modèle partagé", "err", err)
+		for _, name := range []string{k, share.ThumbKey(k)} {
+			if err := share.Remove(s.cfg.ShareDir, name); err != nil {
+				s.log.Error("suppression d'un modèle partagé", "err", err)
+			}
 		}
 	}
 }
@@ -530,6 +604,9 @@ func (s *Server) CleanShareOrphans(ctx context.Context) error {
 	known, err := s.store.AllShareStorageKeys(ctx)
 	if err != nil {
 		return err
+	}
+	for k := range known {
+		known[share.ThumbKey(k)] = true
 	}
 	n, err := share.CleanOrphans(s.cfg.ShareDir, known)
 	if n > 0 {

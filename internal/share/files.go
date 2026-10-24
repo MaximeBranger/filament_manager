@@ -10,7 +10,8 @@ import (
 	"regexp"
 )
 
-var keyPattern = regexp.MustCompile(`^[0-9a-f]{32}\.fmm$`)
+// Maillages (.fmm) et miniatures (.png) partagent le même nom aléatoire.
+var keyPattern = regexp.MustCompile(`^[0-9a-f]{32}\.(fmm|png)$`)
 
 // NewStorageKey renvoie un nom de fichier aléatoire.
 func NewStorageKey() string {

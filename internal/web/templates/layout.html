@@ -15,9 +15,9 @@
 <meta name="apple-mobile-web-app-title" content="Filaments">
 <script src="/static/vendor/htmx.min.js?v={{.Version}}" defer></script>
 <script src="/static/app.js?v={{.Version}}" defer></script>
-{{if .PlausibleURL}}{{if .ShareTracking}}
+{{if .PlausibleURL}}{{if .TrackAs}}
 <script defer data-domain="{{.PlausibleDomain}}" src="{{.PlausibleURL}}/js/script.manual.js"></script>
-<script defer src="/static/plausible-share.js?v={{.Version}}"></script>
+<script defer src="/static/plausible-manual.js?v={{.Version}}" data-url="{{.TrackAs}}"></script>
 {{else}}<script defer data-domain="{{.PlausibleDomain}}" src="{{.PlausibleURL}}/js/script.js"></script>{{end}}{{end}}
 </head>
 <body>
