@@ -1,0 +1,49 @@
+{{define "content"}}
+<h1>Réception</h1>
+<p class="muted">Scannez les boîtes les unes après les autres. Un même code scanné à nouveau ajoute une bobine. Validez en bas une fois terminé.</p>
+
+<div class="scanner">
+  <video id="video" playsinline muted></video>
+  <p id="scan-status" class="muted" role="status"></p>
+  <button type="button" id="scan-start" class="btn primary">Activer la caméra</button>
+</div>
+
+<form id="manual-ean" class="card inline-form">
+  <label>Saisie manuelle du code
+    <input name="ean" inputmode="numeric" maxlength="32" required autocomplete="off">
+  </label>
+  <button class="btn">Ajouter</button>
+</form>
+
+<div id="new-product" class="card" hidden>
+  <h2>Nouveau produit</h2>
+  <p class="muted small">Ce code-barre est inconnu : renseignez le produit, il sera reconnu les fois suivantes.</p>
+  <form id="new-product-form">
+    {{template "product_fields" .}}
+    <div class="actions">
+      <button type="button" class="btn" id="new-cancel">Annuler</button>
+      <button class="btn primary">Ajouter à la réception</button>
+    </div>
+  </form>
+</div>
+
+<h2>Bobines reçues</h2>
+<ul id="reception-list" class="spools"></ul>
+<p id="reception-empty" class="empty-state">Aucune bobine scannée pour l'instant.</p>
+
+<form id="reception-form" class="card">
+  <div class="grid">
+    <label>Date d'achat <input type="date" name="purchase_date" value="{{.Today}}"></label>
+    <label>Fournisseur <input name="supplier" maxlength="200"></label>
+  </div>
+  <p id="reception-error" class="field-error" role="alert"></p>
+  <button class="btn primary" id="reception-submit" disabled>Enregistrer la réception</button>
+</form>
+{{template "datalists" .}}
+{{end}}
+
+{{define "scripts"}}
+<script src="/static/vendor/zxing.min.js?v={{.Version}}"></script>
+<script src="/static/scanner.js?v={{.Version}}"></script>
+<script src="/static/reception.js?v={{.Version}}"></script>
+{{end}}

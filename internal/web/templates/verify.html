@@ -1,0 +1,10 @@
+{{define "content"}}
+<div class="narrow">
+  <h1>Connexion</h1>
+  <form method="post" action="/auth/verify" class="card">
+    <input type="hidden" name="t" value="{{.Token}}">
+    <p>Confirmez pour vous connecter à FilamentManager.</p>
+    <button class="btn primary" autofocus>Me connecter</button>
+  </form>
+</div>
+{{end}}

@@ -1,0 +1,109 @@
+{{define "content"}}
+<div class="toolbar">
+  <h1>Mon stock</h1>
+  <div class="actions">
+    <a class="btn" href="/scan">Scanner</a>
+    <a class="btn primary" href="/spools/new">Ajouter</a>
+  </div>
+</div>
+
+<form id="filters" class="filters" action="/stock" method="get"
+      hx-get="/stock" hx-target="#results" hx-push-url="true"
+      hx-trigger="input changed delay:300ms, change, submit">
+  <input type="search" name="q" value="{{.Query.Text}}" placeholder="Rechercher : marque, couleur, matériau…" aria-label="Recherche" autocomplete="off">
+
+  <fieldset class="families">
+    <legend class="sr-only">Familles de couleur</legend>
+    {{range families}}
+    <label class="pill" title="{{.Label}}">
+      <input type="checkbox" name="fam" value="{{.Code}}"{{if has $.Query.Families .Code}} checked{{end}}>
+      <span class="swatch" style="background: {{.Hex}}"></span><span class="pill-label">{{.Label}}</span>
+    </label>
+    {{end}}
+  </fieldset>
+
+  <details class="more"{{if or .Query.Materials .Query.Brands .Query.Finishes .Query.Levels .Query.Diameter .Query.Near .Query.ShowEmpty}} open{{end}}>
+    <summary>Plus de filtres</summary>
+    <div class="filter-groups">
+      <fieldset>
+        <legend>Couleur proche</legend>
+        <label class="check"><input type="checkbox" name="near_on" value="1"{{if .Query.Near}} checked{{end}}> Activer</label>
+        <div class="near">
+          <input type="color" name="near" value="{{.Near}}" aria-label="Couleur recherchée">
+          <select name="tol" aria-label="Tolérance">
+            {{range tolerances}}<option value="{{ftoa .Value}}"{{if eq .Value $.Query.Tolerance}} selected{{end}}>{{.Label}}</option>{{end}}
+          </select>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Matériau</legend>
+        {{range materials}}<label class="check"><input type="checkbox" name="mat" value="{{.Code}}"{{if has $.Query.Materials .Code}} checked{{end}}> {{.Label}}</label>{{end}}
+      </fieldset>
+      {{if .Brands}}
+      <fieldset>
+        <legend>Marque</legend>
+        {{range .Brands}}<label class="check"><input type="checkbox" name="brand" value="{{.Code}}"{{if has $.Query.Brands .Code}} checked{{end}}> {{.Label}}</label>{{end}}
+      </fieldset>
+      {{end}}
+      <fieldset>
+        <legend>Finition</legend>
+        {{range finishes}}<label class="check"><input type="checkbox" name="fin" value="{{.Code}}"{{if has $.Query.Finishes .Code}} checked{{end}}> {{.Label}}</label>{{end}}
+      </fieldset>
+      <fieldset>
+        <legend>Niveau</legend>
+        {{range levels}}<label class="check"><input type="checkbox" name="lvl" value="{{.Code}}"{{if has $.Query.Levels .Code}} checked{{end}}> {{.Label}}</label>{{end}}
+        <label class="check"><input type="checkbox" name="empty" value="1"{{if .Query.ShowEmpty}} checked{{end}}> Afficher les vides</label>
+      </fieldset>
+      <fieldset>
+        <legend>Diamètre</legend>
+        <label class="check"><input type="radio" name="dia" value=""{{if not .Query.Diameter}} checked{{end}}> Tous</label>
+        {{range diameters}}<label class="check"><input type="radio" name="dia" value="{{ftoa .}}"{{if eq (ftoa .) $.Query.Diameter}} checked{{end}}> {{diameter .}}</label>{{end}}
+      </fieldset>
+    </div>
+  </details>
+
+  <div class="sort-row">
+    <label>Trier par
+      <select name="sort">
+        {{range sorts}}<option value="{{.Code}}"{{if eq .Code $.Query.Sort}} selected{{end}}>{{.Label}}</option>{{end}}
+      </select>
+    </label>
+    <a href="/stock">Réinitialiser</a>
+    <noscript><button class="btn">Filtrer</button></noscript>
+  </div>
+</form>
+
+<div id="results" aria-live="polite">{{template "results" .}}</div>
+{{end}}
+
+{{define "results"}}
+{{if eq .Total 0}}
+<div class="empty-state">
+  <p><strong>Votre stock est vide.</strong></p>
+  <p>Scannez la boîte d'une bobine, ou ajoutez-la à la main.</p>
+  <p><a class="btn primary" href="/scan">Scanner une boîte</a> <a class="btn" href="/spools/new">Ajouter à la main</a></p>
+</div>
+{{else}}
+<p class="count">{{len .Items}} {{plural (len .Items) "bobine" "bobines"}}{{if .Query.Active}} sur {{.Total}}{{end}}</p>
+{{if .Items}}
+<ul class="spools">{{range .Items}}{{template "spool_row" (dict "Item" .)}}{{end}}</ul>
+{{else}}
+<p class="empty-state">Aucune bobine ne correspond à ces critères.</p>
+{{end}}
+{{end}}
+{{end}}
+
+{{define "spool_row"}}{{with .Item}}
+<li class="spool{{if eq .Level "empty"}} is-empty{{end}}" id="spool-{{.ID}}">
+  <span class="swatch" style="background: {{.Hex}}"></span>
+  <a class="spool-main" href="/spools/{{.ID}}">
+    <strong>{{.Product.ColorName}}</strong>
+    <span class="muted">{{.Product.Brand}} · {{materialText .Product}}{{if ne .Product.Finish "standard"}} · {{finishText .Product}}{{end}} · {{weight .Product.NominalWeightG}}{{if ne .Product.DiameterMM 1.75}} · {{diameter .Product.DiameterMM}}{{end}}</span>
+  </a>
+  {{if ge .Distance 0.0}}<span class="delta" title="Écart de couleur (ΔE2000)">ΔE {{printf "%.1f" .Distance}}</span>{{end}}
+  <select class="level level-{{.Level}}" name="level" aria-label="Niveau"
+          hx-post="/spools/{{.ID}}/level" hx-trigger="change" hx-target="#spool-{{.ID}}" hx-swap="outerHTML">
+    {{$cur := .Level}}{{range levels}}<option value="{{.Code}}"{{if eq .Code $cur}} selected{{end}}>{{.Label}}</option>{{end}}
+  </select>
+</li>
+{{end}}{{end}}

@@ -1,0 +1,24 @@
+{{define "content"}}
+<h1>Scanner une boîte</h1>
+<p class="muted">Visez le code-barre de la boîte. Un produit déjà connu est reconnu ; sinon vous le renseignez une fois.</p>
+
+<div class="scanner">
+  <video id="video" playsinline muted></video>
+  <p id="scan-status" class="muted" role="status"></p>
+  <button type="button" id="scan-start" class="btn primary">Activer la caméra</button>
+</div>
+
+<form method="get" action="/scan/lookup" class="card inline-form">
+  <label>Ou saisissez le code
+    <input name="ean" inputmode="numeric" maxlength="32" required autocomplete="off">
+  </label>
+  <button class="btn">Valider</button>
+</form>
+<p class="small"><a href="/reception">Plusieurs boîtes à enregistrer ? Passez en mode réception.</a></p>
+{{end}}
+
+{{define "scripts"}}
+<script src="/static/vendor/zxing.min.js?v={{.Version}}"></script>
+<script src="/static/scanner.js?v={{.Version}}"></script>
+<script src="/static/scan.js?v={{.Version}}"></script>
+{{end}}

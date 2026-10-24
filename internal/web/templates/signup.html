@@ -1,0 +1,14 @@
+{{define "content"}}
+<div class="narrow">
+  <h1>Bienvenue !</h1>
+  <p class="muted">Votre adresse {{.Email}} est vérifiée. Choisissez le nom que verront vos amis.</p>
+  <form method="post" action="/signup" class="card">
+    <label>Nom d'affichage
+      <input name="display_name" value="{{.Name}}" required maxlength="50" autocomplete="nickname" autofocus>
+      {{with .Error}}<span class="field-error">{{.}}</span>{{end}}
+    </label>
+    <p class="small muted">En créant un compte, vous acceptez la <a href="/confidentialite">politique de confidentialité</a>.</p>
+    <button class="btn primary">Créer mon compte</button>
+  </form>
+</div>
+{{end}}

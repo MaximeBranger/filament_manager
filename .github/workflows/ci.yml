@@ -1,0 +1,156 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - '**'
+
+# Jeton GitHub en lecture seule : aucun job n'écrit sur le dépôt.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Go — vet & tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Formatage
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [[ -n "$unformatted" ]]; then
+            echo "Fichiers non formatés (gofmt) :"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Tests
+        run: go test -race ./...
+
+  docker:
+    name: Docker — FilamentManager
+    runs-on: ubuntu-latest
+    needs: test
+    env:
+      IMAGE_NAME: filament-manager
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Log in to Nexus Docker registry
+        if: github.actor != 'dependabot[bot]'
+        run: |
+          echo "${{ secrets.NEXUS_PASSWORD }}" | docker login \
+            --username "${{ secrets.NEXUS_USERNAME }}" \
+            --password-stdin "${{ vars.NEXUS_URL }}"
+
+      - name: Determine image tags
+        id: tags
+        run: |
+          set -e
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG_NAME="${{ github.ref_name }}"
+            echo "primary=$TAG_NAME" >> "$GITHUB_OUTPUT"
+            echo "version=$TAG_NAME" >> "$GITHUB_OUTPUT"
+            if [[ "$TAG_NAME" == *-beta* ]]; then
+              echo "secondary=beta" >> "$GITHUB_OUTPUT"
+            else
+              echo "secondary=latest" >> "$GITHUB_OUTPUT"
+            fi
+          elif [[ "${{ github.ref_name }}" == "main" ]]; then
+            echo "primary=snapshot" >> "$GITHUB_OUTPUT"
+            echo "secondary=" >> "$GITHUB_OUTPUT"
+            echo "version=snapshot-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          else
+            echo "primary=dev-snapshot" >> "$GITHUB_OUTPUT"
+            echo "secondary=" >> "$GITHUB_OUTPUT"
+            echo "version=dev-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build Docker image
+        env:
+          NEXUS_URL: ${{ vars.NEXUS_URL }}
+          NEXUS_REPOSITORY: ${{ vars.NEXUS_REPOSITORY }}
+          PRIMARY_TAG: ${{ steps.tags.outputs.primary }}
+          APP_VERSION: ${{ steps.tags.outputs.version }}
+        run: |
+          set -e
+          TARGET_PRIMARY="${NEXUS_URL}/${NEXUS_REPOSITORY}/${IMAGE_NAME}:${PRIMARY_TAG}"
+          docker build --build-arg "VERSION=${APP_VERSION}" -t "$TARGET_PRIMARY" .
+          echo "TARGET_PRIMARY=$TARGET_PRIMARY" >> "$GITHUB_ENV"
+
+      # Scan de l'image construite, avant tout push. Rapport HIGH + CRITICAL (informatif),
+      # consultable dans le résumé du run et en artefact.
+      - name: Trivy — image, rapport (HIGH et CRITICAL, informatif)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0 — épinglé par SHA
+        with:
+          scan-type: image
+          image-ref: ${{ env.TARGET_PRIMARY }}
+          severity: HIGH,CRITICAL
+          format: table
+          output: trivy-filament-manager.txt
+          exit-code: '0'
+
+      - name: Trivy — publier le rapport
+        run: |
+          {
+            echo "## Trivy — image filament-manager"
+            echo '```text'
+            cat trivy-filament-manager.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Trivy — rapport en artefact
+        uses: actions/upload-artifact@v7
+        with:
+          name: trivy-filament-manager
+          path: trivy-filament-manager.txt
+          retention-days: 30
+
+      # ignore-unfixed : une CVE de l'image de base sans correctif publié bloquerait toutes
+      # les livraisons sans qu'aucune action soit possible ; elle reste visible ci-dessus.
+      - name: Trivy — image, CVE critiques corrigeables (bloquant)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0 — épinglé par SHA
+        with:
+          scan-type: image
+          image-ref: ${{ env.TARGET_PRIMARY }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: '1'
+
+      - name: Push Docker image
+        env:
+          NEXUS_URL: ${{ vars.NEXUS_URL }}
+          NEXUS_REPOSITORY: ${{ vars.NEXUS_REPOSITORY }}
+          SECONDARY_TAG: ${{ steps.tags.outputs.secondary }}
+          IS_DEPENDABOT: ${{ github.actor == 'dependabot[bot]' }}
+        run: |
+          set -e
+          if [[ "$IS_DEPENDABOT" == "true" ]]; then
+            echo "Dependabot run: skipping registry push (no secrets available), build-only validation."
+            exit 0
+          fi
+
+          docker push "$TARGET_PRIMARY"
+
+          if [[ -n "$SECONDARY_TAG" ]]; then
+            TARGET_SECONDARY="${NEXUS_URL}/${NEXUS_REPOSITORY}/${IMAGE_NAME}:${SECONDARY_TAG}"
+            docker tag "$TARGET_PRIMARY" "$TARGET_SECONDARY"
+            docker push "$TARGET_SECONDARY"
+          fi

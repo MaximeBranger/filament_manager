@@ -1,0 +1,26 @@
+{{define "content"}}
+<article class="prose">
+  <h1>Confidentialité</h1>
+
+  <h2>Données collectées</h2>
+  <ul>
+    <li><strong>Compte</strong> : votre adresse email et le nom d'affichage que vous choisissez.</li>
+    <li><strong>Collection</strong> : les produits et bobines que vous saisissez (marque, couleur, niveau, date et prix d'achat, fournisseur, notes).</li>
+    <li><strong>Technique</strong> : un cookie de session, indispensable à la connexion, et des journaux techniques (adresse IP, pages appelées) conservés pour la sécurité du service.</li>
+  </ul>
+
+  <h2>Finalités</h2>
+  <p>Ces données servent uniquement à faire fonctionner le service : vous connecter, afficher et rechercher votre collection. Elles ne sont ni vendues ni partagées. Votre adresse email sert à vous envoyer les liens de connexion.</p>
+
+  {{if .PlausibleURL}}
+  <h2>Mesure d'audience</h2>
+  <p>La fréquentation est mesurée avec Plausible, auto-hébergé : sans cookie, sans traçage d'une visite à l'autre et sans donnée personnelle.</p>
+  {{end}}
+
+  <h2>Conservation</h2>
+  <p>Vos données sont conservées tant que votre compte existe. Les sessions et liens de connexion expirés sont purgés automatiquement. Des sauvegardes techniques sont conservées quelques jours.</p>
+
+  <h2>Vos droits</h2>
+  <p>Depuis la page <a href="/account">Mon compte</a>, vous pouvez à tout moment exporter vos données (CSV ou JSON) et supprimer votre compte, ce qui efface définitivement toutes vos données.</p>
+</article>
+{{end}}

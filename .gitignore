@@ -1,0 +1,7 @@
+/filamentmanager
+*.db
+*.db-shm
+*.db-wal
+/data/
+/backups/
+.env

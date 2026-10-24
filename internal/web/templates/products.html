@@ -1,0 +1,24 @@
+{{define "content"}}
+<div class="toolbar">
+  <h1>Mes produits</h1>
+  <div class="actions"><a class="btn primary" href="/spools/new">Nouveau produit</a></div>
+</div>
+<p class="muted">Un produit est une référence (marque, matériau, couleur…). Le modifier met à jour toutes ses bobines.</p>
+{{if .Products}}
+<ul class="spools">
+  {{range .Products}}
+  <li class="spool">
+    <span class="swatch" style="background: {{hex .}}"></span>
+    <a class="spool-main" href="/products/{{.ID}}">
+      <strong>{{.ColorName}}</strong>
+      <span class="muted">{{.Brand}} · {{materialText .}} · {{finishText .}} · {{weight .NominalWeightG}}{{with .EAN}} · {{.}}{{end}}</span>
+    </a>
+    <span class="count-badge">{{.SpoolCount}} {{plural .SpoolCount "bobine" "bobines"}}</span>
+    <a class="btn small" href="/spools/new?product_id={{.ID}}" aria-label="Ajouter une bobine de ce produit">+</a>
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<p class="empty-state">Aucun produit pour l'instant.</p>
+{{end}}
+{{end}}

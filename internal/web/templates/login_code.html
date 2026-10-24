@@ -1,0 +1,21 @@
+{{define "content"}}
+<div class="narrow">
+  <h1>Vérifiez vos emails</h1>
+  <p class="muted">Si l'adresse est valide, un email vient de partir. Cliquez sur le lien qu'il contient, ou saisissez ici le code à 6 chiffres.</p>
+  {{if .Expired}}
+    <div class="card">
+      <p class="field-error">{{.Error}}</p>
+      <a class="btn primary" href="/login">Recevoir un nouvel email</a>
+    </div>
+  {{else}}
+  <form method="post" action="/login/code" class="card">
+    <label>Code de connexion
+      <input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" required autofocus class="code-input">
+      {{with .Error}}<span class="field-error">{{.}}</span>{{end}}
+    </label>
+    <button class="btn primary">Se connecter</button>
+  </form>
+  <p class="small"><a href="/login">Je n'ai rien reçu : renvoyer un email</a></p>
+  {{end}}
+</div>
+{{end}}

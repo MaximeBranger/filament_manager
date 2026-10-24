@@ -1,0 +1,182 @@
+// Package web expose l'application en HTTP : routes, middlewares, rendu des pages.
+package web
+
+import (
+	"context"
+	"embed"
+	"io/fs"
+	"log/slog"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/MaximeBranger/filament_manager/internal/auth"
+	"github.com/MaximeBranger/filament_manager/internal/config"
+	"github.com/MaximeBranger/filament_manager/internal/mail"
+	"github.com/MaximeBranger/filament_manager/internal/store"
+)
+
+//go:embed templates static
+var assets embed.FS
+
+type Server struct {
+	cfg       *config.Config
+	store     *store.Store
+	mailer    mail.Mailer
+	log       *slog.Logger
+	version   string
+	pages     map[string]*pageTemplate
+	emailRate *auth.RateLimiter
+	ipRate    *auth.RateLimiter
+	csp       string
+}
+
+func New(cfg *config.Config, st *store.Store, mailer mail.Mailer, log *slog.Logger, version string) (*Server, error) {
+	s := &Server{
+		cfg:       cfg,
+		store:     st,
+		mailer:    mailer,
+		log:       log,
+		version:   version,
+		emailRate: auth.NewRateLimiter(cfg.RateLimitEmail.Count, cfg.RateLimitEmail.Window),
+		ipRate:    auth.NewRateLimiter(cfg.RateLimitIP.Count, cfg.RateLimitIP.Window),
+	}
+	pages, err := parseTemplates()
+	if err != nil {
+		return nil, err
+	}
+	s.pages = pages
+	s.csp = buildCSP(cfg)
+	return s, nil
+}
+
+func buildCSP(cfg *config.Config) string {
+	script, connect := "'self'", "'self'"
+	if cfg.PlausibleEnabled() {
+		script += " " + cfg.PlausibleURL
+		connect += " " + cfg.PlausibleURL
+	}
+	return strings.Join([]string{
+		"default-src 'self'",
+		"script-src " + script,
+		"connect-src " + connect,
+		"style-src 'self' 'unsafe-inline'",
+		"img-src 'self' data:",
+		"media-src 'self' blob: mediastream:",
+		"object-src 'none'",
+		"base-uri 'self'",
+		"form-action 'self'",
+		"frame-ancestors 'none'",
+	}, "; ")
+}
+
+// Handler renvoie l'application complète, middlewares compris.
+func (s *Server) Handler() http.Handler {
+	mux := http.NewServeMux()
+
+	static, _ := fs.Sub(assets, "static")
+	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheForever(http.FileServerFS(static))))
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
+	mux.HandleFunc("GET /readyz", s.readyz)
+
+	mux.HandleFunc("GET /{$}", s.home)
+	mux.HandleFunc("GET /confidentialite", s.privacy)
+
+	mux.HandleFunc("GET /login", s.loginForm)
+	mux.HandleFunc("POST /login", s.loginSubmit)
+	mux.HandleFunc("GET /login/code", s.codeForm)
+	mux.HandleFunc("POST /login/code", s.codeSubmit)
+	mux.HandleFunc("GET /auth/verify", s.verifyForm)
+	mux.HandleFunc("POST /auth/verify", s.verifySubmit)
+	mux.HandleFunc("GET /signup", s.signupForm)
+	mux.HandleFunc("POST /signup", s.signupSubmit)
+	mux.HandleFunc("POST /logout", s.logout)
+
+	user := func(h http.HandlerFunc) http.Handler { return s.requireUser(h) }
+	mux.Handle("GET /stock", user(s.stockList))
+	mux.Handle("GET /spools/new", user(s.spoolNew))
+	mux.Handle("POST /spools", user(s.spoolCreate))
+	mux.Handle("GET /spools/{id}", user(s.spoolEdit))
+	mux.Handle("POST /spools/{id}", user(s.spoolUpdate))
+	mux.Handle("POST /spools/{id}/level", user(s.spoolLevel))
+	mux.Handle("POST /spools/{id}/delete", user(s.spoolDelete))
+	mux.Handle("GET /products", user(s.productList))
+	mux.Handle("GET /products/{id}", user(s.productEdit))
+	mux.Handle("POST /products/{id}", user(s.productUpdate))
+	mux.Handle("POST /products/{id}/delete", user(s.productDelete))
+	mux.Handle("GET /scan", user(s.scanPage))
+	mux.Handle("GET /scan/lookup", user(s.scanLookup))
+	mux.Handle("GET /reception", user(s.receptionPage))
+	mux.Handle("POST /reception", user(s.receptionSubmit))
+	mux.Handle("GET /api/products/lookup", user(s.productLookup))
+	mux.Handle("GET /account", user(s.accountPage))
+	mux.Handle("POST /account/name", user(s.accountName))
+	mux.Handle("GET /account/export.json", user(s.exportJSON))
+	mux.Handle("GET /account/export.csv", user(s.exportCSV))
+	mux.Handle("POST /account/delete", user(s.accountDelete))
+
+	cop := http.NewCrossOriginProtection()
+	cop.AddTrustedOrigin(s.cfg.BaseURL.Scheme + "://" + s.cfg.BaseURL.Host)
+	cop.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.log.Warn("requête cross-origin refusée", "path", r.URL.Path, "origin", r.Header.Get("Origin"))
+		http.Error(w, "Requête refusée.", http.StatusForbidden)
+	}))
+
+	var h http.Handler = mux
+	h = s.loadSession(h)
+	h = cop.Handler(h)
+	h = s.securityHeaders(h)
+	h = s.recoverer(h)
+	h = s.logRequests(h)
+	return h
+}
+
+func cacheForever(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("v") != "" {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+		}
+		h.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	if err := s.store.Ping(ctx); err != nil {
+		s.log.Error("readyz", "err", err)
+		http.Error(w, "base indisponible", http.StatusServiceUnavailable)
+		return
+	}
+	w.Write([]byte("ok"))
+}
+
+func (s *Server) home(w http.ResponseWriter, r *http.Request) {
+	if currentUser(r) != nil {
+		http.Redirect(w, r, "/stock", http.StatusSeeOther)
+		return
+	}
+	s.render(w, r, http.StatusOK, "home", nil)
+}
+
+func (s *Server) privacy(w http.ResponseWriter, r *http.Request) {
+	s.render(w, r, http.StatusOK, "privacy", nil)
+}
+
+// PurgeLoop supprime régulièrement les sessions et défis de connexion expirés.
+func (s *Server) PurgeLoop(ctx context.Context) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		if err := s.store.PurgeExpired(ctx); err != nil && ctx.Err() == nil {
+			s.log.Error("purge des sessions expirées", "err", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}

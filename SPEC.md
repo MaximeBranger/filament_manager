@@ -260,7 +260,7 @@ Règles d'intégrité applicatives (vérifiées dans le code + tests) :
 
 ### 5.4 Compte
 - Modifier nom d'affichage, préférence emails.
-- Changer d'email : lien magique envoyé à la nouvelle adresse.
+- Changer d'email : lien magique envoyé à la nouvelle adresse. *(Reporté après v1a.)*
 - **Export** : JSON (et CSV des bobines) de toutes ses données.
 - **Suppression** : confirmation par saisie de l'email. **Refusée tant qu'un prêt actif existe** (comme prêteur ou emprunteur) ; transactions en attente annulées. Suppression réelle (cascade).
 
@@ -373,33 +373,33 @@ Les emails sont envoyés de façon asynchrone (goroutine + file en mémoire, que
 - **Go** (dernière version stable), un seul binaire.
 - HTTP : `net/http` (routeur standard Go ≥ 1.22).
 - Rendu : `html/template` + **htmx** (servi localement). JS maison minimal : scanner, sélecteur de couleur, liste de réception.
-- SQLite : `modernc.org/sqlite` (pur Go, **sans CGO**). Requêtes typées via **sqlc**.
+- SQLite : `modernc.org/sqlite` (pur Go, **sans CGO**). Requêtes écrites à la main avec `database/sql` dans le package `store` (sqlc écarté : les filtres dynamiques sont faits en mémoire, le gain ne justifiait pas un outil de génération de plus).
+- Interface en français, **vouvoiement**.
 - Migrations SQL versionnées, **embarquées** (`embed`), appliquées automatiquement au démarrage, uniquement ascendantes.
 - Templates, CSS, JS, migrations embarqués dans le binaire.
 - CSS : feuille maison légère, mobile-first, pas de framework ni d'étape de build front.
 
-### 9.2 Arborescence proposée
+### 9.2 Arborescence
 ```
-cmd/filamentmanager/main.go     # config, wiring, démarrage
+cmd/filamentmanager/main.go     # config, wiring, démarrage, sous-commande healthcheck
 internal/config/                # lecture + validation des env vars
-internal/db/                    # ouverture SQLite, migrations, code sqlc
+internal/db/                    # ouverture SQLite, migrations embarquées
 internal/db/migrations/*.sql
-internal/db/queries/*.sql
-internal/auth/                  # lien magique, sessions, rate limit
-internal/stock/                 # produits, bobines, recherche, filtres
-internal/color/                 # conversion Lab, ΔE2000, familles
-internal/friends/               # invitations, amitiés, visibilité
-internal/transfers/             # prêts, dons
-internal/notify/                # notifications in-app + email
-internal/mail/                  # interface Mailer + implémentation SMTP
+internal/store/                 # accès aux données (users, sessions, produits, bobines…)
+internal/auth/                  # jetons, codes, signature, rate limit, IP cliente
+internal/catalog/               # référentiels fixes, normalisation des marques
+internal/color/                 # conversion Lab, ΔE2000, tri par teinte
+internal/stock/                 # validation des saisies, recherche, filtres, tri (logique pure)
+internal/mail/                  # interface Mailer + SMTP + Fake (tests)
 internal/backup/                # VACUUM INTO périodique + rétention
-internal/web/                   # handlers HTTP, middlewares, templates
-web/templates/  web/static/     # embarqués
+internal/web/                   # handlers HTTP, middlewares, rendu
+internal/web/templates/  internal/web/static/   # embarqués dans le binaire
 ```
+v1b ajoutera `internal/store` (amis, transferts, notifications) et les handlers correspondants.
 
 ### 9.3 Sécurité
 - **Cloisonnement** : toute requête de lecture/écriture filtre sur `user_id` de la session ; l'accès au stock d'un tiers passe par une seule fonction de vérification d'amitié + règles §7.2. Couvert par des tests dédiés.
-- **CSRF** : cookie `SameSite=Lax` + jeton CSRF synchronisé, envoyé par htmx via `hx-headers` et dans les formulaires.
+- **CSRF** : cookie `SameSite=Lax` + `http.CrossOriginProtection` de la bibliothèque standard (Go ≥ 1.25), qui rejette les requêtes non sûres cross-origin d'après `Sec-Fetch-Site` / `Origin`. Pas de jeton à propager dans les formulaires. `BASE_URL` est déclarée origine de confiance ; Nginx Proxy Manager doit transmettre l'en-tête `Host` d'origine (comportement par défaut).
 - En-têtes : `Content-Security-Policy` stricte (`default-src 'self'`, + origine Plausible si activé), `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `Permissions-Policy: camera=(self)`.
 - Jetons (session, lien magique, invitation) : 32 octets `crypto/rand`, stockés hashés (SHA-256), comparaison en temps constant.
 - Aucune donnée personnelle dans les URL suivies par Plausible.

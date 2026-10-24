@@ -1,0 +1,17 @@
+{{define "content"}}
+<h1>Bobine</h1>
+<div class="card">
+  {{template "product_summary" .Spool.Product}}
+  <p class="small"><a href="/products/{{.Spool.Product.ID}}">Modifier le produit</a> · <a href="/spools/new?product_id={{.Spool.Product.ID}}">Ajouter une bobine identique</a></p>
+</div>
+
+<form method="post" action="/spools/{{.Spool.ID}}" class="card">
+  {{template "spool_fields" .}}
+  <div class="actions"><a class="btn" href="/stock">Annuler</a><button class="btn primary">Enregistrer</button></div>
+</form>
+
+<form method="post" action="/spools/{{.Spool.ID}}/delete" class="danger-zone" data-confirm="Supprimer définitivement cette bobine ?">
+  <p class="small muted">Pour une bobine terminée, préférez le niveau « Vide » : elle reste dans votre historique.</p>
+  <button class="btn danger">Supprimer la bobine</button>
+</form>
+{{end}}

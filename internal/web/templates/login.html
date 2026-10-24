@@ -1,0 +1,14 @@
+{{define "content"}}
+<div class="narrow">
+  <h1>Connexion</h1>
+  <p class="muted">Pas de mot de passe : saisissez votre email, vous recevrez un lien et un code de connexion. Si vous n'avez pas encore de compte, il sera créé.</p>
+  <form method="post" action="/login" class="card">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <label>Adresse email
+      <input type="email" name="email" value="{{.Email}}" required autocomplete="email" autofocus>
+      {{with .Error}}<span class="field-error">{{.}}</span>{{end}}
+    </label>
+    <button class="btn primary">Recevoir mon lien</button>
+  </form>
+</div>
+{{end}}

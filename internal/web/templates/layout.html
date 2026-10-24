@@ -1,0 +1,35 @@
+{{define "layout"}}<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>{{with .Title}}{{.}} · {{end}}FilamentManager</title>
+<meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"allowScriptTags":false}'>
+<link rel="stylesheet" href="/static/app.css?v={{.Version}}">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<script src="/static/vendor/htmx.min.js?v={{.Version}}" defer></script>
+<script src="/static/app.js?v={{.Version}}" defer></script>
+{{if .PlausibleURL}}<script defer data-domain="{{.PlausibleDomain}}" src="{{.PlausibleURL}}/js/script.js"></script>{{end}}
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/"><img src="/static/icon.svg" alt="" width="24" height="24">FilamentManager</a>
+  {{if .User}}
+  <nav class="nav">
+    <a href="/stock"{{if eq .Path "/stock"}} aria-current="page"{{end}}>Stock</a>
+    <a href="/scan"{{if eq .Path "/scan"}} aria-current="page"{{end}}>Scanner</a>
+    <a href="/reception"{{if eq .Path "/reception"}} aria-current="page"{{end}}>Réception</a>
+    <a href="/products"{{if eq .Path "/products"}} aria-current="page"{{end}}>Produits</a>
+    <a href="/account"{{if eq .Path "/account"}} aria-current="page"{{end}}>Compte</a>
+  </nav>
+  {{end}}
+</header>
+<main class="container">
+  {{with .Flash}}<div class="flash" role="status">{{.}}</div>{{end}}
+  {{template "content" .}}
+</main>
+<footer class="footer"><a href="/confidentialite">Confidentialité</a></footer>
+{{block "scripts" .}}{{end}}
+</body>
+</html>{{end}}

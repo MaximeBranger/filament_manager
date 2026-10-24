@@ -1,0 +1,33 @@
+{{define "content"}}
+<h1>Mon compte</h1>
+
+<form method="post" action="/account/name" class="card">
+  <h2>Profil</h2>
+  <p class="muted">Email : {{.User.Email}}</p>
+  <label>Nom d'affichage
+    <input name="display_name" value="{{.User.DisplayName}}" required maxlength="50">
+    {{with .NameError}}<span class="field-error">{{.}}</span>{{end}}
+  </label>
+  <button class="btn primary">Enregistrer</button>
+</form>
+
+<div class="card">
+  <h2>Mes données</h2>
+  <p class="muted">Téléchargez toute votre collection, par exemple pour la sauvegarder.</p>
+  <p><a class="btn" href="/account/export.csv">Export CSV</a> <a class="btn" href="/account/export.json">Export JSON</a></p>
+</div>
+
+<form method="post" action="/logout" class="card">
+  <button class="btn">Se déconnecter</button>
+</form>
+
+<form method="post" action="/account/delete" class="danger-zone" data-confirm="Supprimer définitivement votre compte et toutes vos données ?">
+  <h2>Supprimer mon compte</h2>
+  <p class="small">Toutes vos bobines et produits seront définitivement supprimés. Pour confirmer, saisissez votre adresse email.</p>
+  <label>Adresse email
+    <input type="email" name="confirm_email" required autocomplete="off">
+    {{with .DeleteError}}<span class="field-error">{{.}}</span>{{end}}
+  </label>
+  <button class="btn danger">Supprimer mon compte</button>
+</form>
+{{end}}

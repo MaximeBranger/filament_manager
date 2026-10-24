@@ -1,0 +1,104 @@
+{{define "datalists"}}
+<datalist id="brand-list">{{range .BrandSuggestions}}<option value="{{.}}">{{end}}</datalist>
+<datalist id="weight-list">{{range weights}}<option value="{{.}}">{{end}}</datalist>
+{{end}}
+
+{{define "product_summary"}}
+<div class="product-summary">
+  <span class="swatch lg" style="background: {{hex .}}"></span>
+  <div>
+    <strong>{{.ColorName}}</strong>
+    <div class="muted">{{.Brand}} · {{materialText .}} · {{finishText .}} · {{weight .NominalWeightG}} · {{diameter .DiameterMM}}</div>
+    {{with .EAN}}<div class="muted small">Code-barre {{.}}</div>{{end}}
+  </div>
+</div>
+{{end}}
+
+{{define "product_fields"}}
+<div class="grid">
+  <label>Marque
+    <input name="brand" list="brand-list" value="{{val .Form "brand"}}" required maxlength="200" autocomplete="off" placeholder="ex. eSun">
+    {{with ferr .Errors "brand"}}<span class="field-error">{{.}}</span>{{end}}
+  </label>
+  <label>Matériau
+    {{$cur := val .Form "material"}}
+    <select name="material" data-other="material">
+      {{range materials}}<option value="{{.Code}}"{{if eq .Code $cur}} selected{{end}}>{{.Label}}</option>{{end}}
+    </select>
+    {{with ferr .Errors "material"}}<span class="field-error">{{.}}</span>{{end}}
+  </label>
+  <label data-other-for="material"{{if ne $cur "OTHER"}} hidden{{end}}>Précisez le matériau
+    <input name="material_other" value="{{val .Form "material_other"}}" maxlength="200">
+    {{with ferr .Errors "material_other"}}<span class="field-error">{{.}}</span>{{end}}
+  </label>
+  <label>Nom de la couleur
+    <input name="color_name" value="{{val .Form "color_name"}}" required maxlength="200" placeholder="ex. Galaxy Black">
+    {{with ferr .Errors "color_name"}}<span class="field-error">{{.}}</span>{{end}}
+  </label>
+  <label>Famille de couleur
+    {{$fam := val .Form "color_family"}}
+    <select name="color_family" class="js-family">
+      {{range families}}<option value="{{.Code}}" data-hex="{{.Hex}}"{{if eq .Code $fam}} selected{{end}}>{{.Label}}</option>{{end}}
+    </select>
+    {{with ferr .Errors "color_family"}}<span class="field-error">{{.}}</span>{{end}}
+  </label>
+  <label>Teinte exacte
+    <input type="color" name="color_hex" class="js-hex" value="{{val .Form "color_hex"}}"{{if ne (val .Form "color_hex") (familyHex $fam)}} data-touched="1"{{end}}>
+    {{with ferr .Errors "color_hex"}}<span class="field-error">{{.}}</span>{{end}}
+  </label>
+  <label>Finition
+    {{$fin := val .Form "finish"}}
+    <select name="finish" data-other="finish">
+      {{range finishes}}<option value="{{.Code}}"{{if eq .Code $fin}} selected{{end}}>{{.Label}}</option>{{end}}
+    </select>
+  </label>
+  <label data-other-for="finish"{{if ne $fin "OTHER"}} hidden{{end}}>Précisez la finition
+    <input name="finish_other" value="{{val .Form "finish_other"}}" maxlength="200">
+    {{with ferr .Errors "finish_other"}}<span class="field-error">{{.}}</span>{{end}}
+  </label>
+  <label>Diamètre
+    {{$dia := val .Form "diameter"}}
+    <select name="diameter">
+      {{range diameters}}<option value="{{ftoa .}}"{{if eq (ftoa .) $dia}} selected{{end}}>{{diameter .}}</option>{{end}}
+    </select>
+    {{with ferr .Errors "diameter"}}<span class="field-error">{{.}}</span>{{end}}
+  </label>
+  <label>Poids nominal (g)
+    <input type="number" name="weight" list="weight-list" min="1" max="20000" step="1" value="{{val .Form "weight"}}">
+    {{with ferr .Errors "weight"}}<span class="field-error">{{.}}</span>{{end}}
+  </label>
+  <label>Code-barre
+    <input name="ean" value="{{val .Form "ean"}}" inputmode="numeric" maxlength="32" autocomplete="off">
+    {{with ferr .Errors "ean"}}<span class="field-error">{{.}}</span>{{end}}
+  </label>
+</div>
+{{end}}
+
+{{define "spool_fields"}}
+<div class="grid">
+  <label>Niveau
+    {{$cur := val .Form "level"}}
+    <select name="level">
+      {{range levels}}<option value="{{.Code}}"{{if eq .Code $cur}} selected{{end}}>{{.Label}}</option>{{end}}
+    </select>
+    {{with ferr .Errors "level"}}<span class="field-error">{{.}}</span>{{end}}
+  </label>
+  <label>Date d'achat
+    <input type="date" name="purchase_date" value="{{val .Form "purchase_date"}}">
+    {{with ferr .Errors "purchase_date"}}<span class="field-error">{{.}}</span>{{end}}
+  </label>
+  <label>Prix (€)
+    <input name="price" value="{{val .Form "price"}}" inputmode="decimal" placeholder="ex. 19,99">
+    {{with ferr .Errors "price"}}<span class="field-error">{{.}}</span>{{end}}
+  </label>
+  <label>Fournisseur
+    <input name="supplier" value="{{val .Form "supplier"}}" maxlength="200">
+    {{with ferr .Errors "supplier"}}<span class="field-error">{{.}}</span>{{end}}
+  </label>
+  <label class="full">Notes
+    <textarea name="notes" rows="2" maxlength="2000">{{val .Form "notes"}}</textarea>
+    {{with ferr .Errors "notes"}}<span class="field-error">{{.}}</span>{{end}}
+  </label>
+  <label class="check full"><input type="checkbox" name="hidden"{{if val .Form "hidden"}} checked{{end}}> Masquer cette bobine à mes amis</label>
+</div>
+{{end}}
