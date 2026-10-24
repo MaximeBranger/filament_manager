@@ -25,7 +25,7 @@
 
   <fieldset class="families">
     <legend class="sr-only">Familles de couleur</legend>
-    {{range families}}
+    {{range .Facets.Families}}
     <label class="pill" title="{{.Label}}">
       <input type="checkbox" name="fam" value="{{.Code}}"{{if has $.Query.Families .Code}} checked{{end}}>
       <span class="swatch" style="background: {{.Hex}}"></span><span class="pill-label">{{.Label}}</span>
@@ -46,20 +46,24 @@
           </select>
         </div>
       </fieldset>
+      {{if .Facets.Materials}}
       <fieldset>
         <legend>Matériau</legend>
-        {{range materials}}<label class="check"><input type="checkbox" name="mat" value="{{.Code}}"{{if has $.Query.Materials .Code}} checked{{end}}> {{.Label}}</label>{{end}}
-      </fieldset>
-      {{if .Brands}}
-      <fieldset>
-        <legend>Marque</legend>
-        {{range .Brands}}<label class="check"><input type="checkbox" name="brand" value="{{.Code}}"{{if has $.Query.Brands .Code}} checked{{end}}> {{.Label}}</label>{{end}}
+        {{range .Facets.Materials}}<label class="check"><input type="checkbox" name="mat" value="{{.Code}}"{{if has $.Query.Materials .Code}} checked{{end}}> {{.Label}}</label>{{end}}
       </fieldset>
       {{end}}
+      {{if .Facets.Brands}}
+      <fieldset>
+        <legend>Marque</legend>
+        {{range .Facets.Brands}}<label class="check"><input type="checkbox" name="brand" value="{{.Code}}"{{if has $.Query.Brands .Code}} checked{{end}}> {{.Label}}</label>{{end}}
+      </fieldset>
+      {{end}}
+      {{if .Facets.Finishes}}
       <fieldset>
         <legend>Finition</legend>
-        {{range finishes}}<label class="check"><input type="checkbox" name="fin" value="{{.Code}}"{{if has $.Query.Finishes .Code}} checked{{end}}> {{.Label}}</label>{{end}}
+        {{range .Facets.Finishes}}<label class="check"><input type="checkbox" name="fin" value="{{.Code}}"{{if has $.Query.Finishes .Code}} checked{{end}}> {{.Label}}</label>{{end}}
       </fieldset>
+      {{end}}
       <fieldset>
         <legend>Niveau</legend>
         {{range levels}}<label class="check"><input type="checkbox" name="lvl" value="{{.Code}}"{{if has $.Query.Levels .Code}} checked{{end}}> {{.Label}}</label>{{end}}
@@ -71,11 +75,13 @@
         <label class="check"><input type="radio" name="avail" value="available"{{if eq .Query.Avail "available"}} checked{{end}}> Disponibles</label>
         <label class="check"><input type="radio" name="avail" value="lent"{{if eq .Query.Avail "lent"}} checked{{end}}> Prêtées</label>
       </fieldset>
+      {{if or (gt (len .Facets.Diameters) 1) .Query.Diameter}}
       <fieldset>
         <legend>Diamètre</legend>
         <label class="check"><input type="radio" name="dia" value=""{{if not .Query.Diameter}} checked{{end}}> Tous</label>
-        {{range diameters}}<label class="check"><input type="radio" name="dia" value="{{ftoa .}}"{{if eq (ftoa .) $.Query.Diameter}} checked{{end}}> {{diameter .}}</label>{{end}}
+        {{range .Facets.Diameters}}<label class="check"><input type="radio" name="dia" value="{{ftoa .}}"{{if eq (ftoa .) $.Query.Diameter}} checked{{end}}> {{diameter .}}</label>{{end}}
       </fieldset>
+      {{end}}
     </div>
   </details>
 

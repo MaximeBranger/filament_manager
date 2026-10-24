@@ -49,7 +49,13 @@ type Config struct {
 	ShareDir         string
 	ShareMaxFileSize int64
 	ShareMaxActive   int
+
+	WebAuthnRPID   string
+	WebAuthnRPName string
 }
+
+// Origin renvoie l'origine publique (schéma + hôte) de l'application.
+func (c *Config) Origin() string { return c.BaseURL.Scheme + "://" + c.BaseURL.Host }
 
 // SecureCookies indique si les cookies doivent porter l'attribut Secure.
 func (c *Config) SecureCookies() bool { return c.BaseURL.Scheme == "https" }
@@ -129,6 +135,16 @@ func Load(getenv func(string) string) (*Config, error) {
 	c.ShareMaxActive = p.integer("SHARE_MAX_ACTIVE", 5)
 	if c.ShareMaxActive < 1 {
 		p.fail("SHARE_MAX_ACTIVE", "doit être ≥ 1")
+	}
+
+	c.WebAuthnRPName = p.str("WEBAUTHN_RP_NAME", "FilamentManager")
+	if c.BaseURL != nil {
+		host := c.BaseURL.Hostname()
+		c.WebAuthnRPID = strings.ToLower(p.str("WEBAUTHN_RP_ID", host))
+		// L'identifiant de la partie de confiance doit être le domaine de BASE_URL ou l'un de ses suffixes.
+		if c.WebAuthnRPID != host && !strings.HasSuffix(host, "."+c.WebAuthnRPID) {
+			p.fail("WEBAUTHN_RP_ID", "doit être le domaine de BASE_URL ou un domaine parent ("+host+")")
+		}
 	}
 
 	if len(p.errs) > 0 {

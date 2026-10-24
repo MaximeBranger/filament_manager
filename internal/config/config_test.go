@@ -103,6 +103,22 @@ func TestShareSettings(t *testing.T) {
 	}
 }
 
+func TestWebAuthnSettings(t *testing.T) {
+	c, _ := Load(env(validEnv()))
+	if c.WebAuthnRPID != "filaments.example.fr" || c.WebAuthnRPName != "FilamentManager" || c.Origin() != "https://filaments.example.fr" {
+		t.Errorf("valeurs par défaut : %q %q %q", c.WebAuthnRPID, c.WebAuthnRPName, c.Origin())
+	}
+	e := validEnv()
+	e["WEBAUTHN_RP_ID"] = "example.fr"
+	if c, err := Load(env(e)); err != nil || c.WebAuthnRPID != "example.fr" {
+		t.Errorf("domaine parent refusé : %v", err)
+	}
+	e["WEBAUTHN_RP_ID"] = "evil.fr"
+	if _, err := Load(env(e)); err == nil || !strings.Contains(err.Error(), "WEBAUTHN_RP_ID") {
+		t.Errorf("domaine étranger accepté : %v", err)
+	}
+}
+
 func TestParseRate(t *testing.T) {
 	r, err := ParseRate("5/1h")
 	if err != nil || r.Count != 5 || r.Window != time.Hour {

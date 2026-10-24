@@ -239,3 +239,78 @@ func (q Query) sort(items []Item) {
 	}
 	sort.SliceStable(items, func(i, j int) bool { return less(items[i], items[j]) })
 }
+
+// Facets liste les valeurs de filtre présentes dans un stock, dans l'ordre du catalogue.
+// Les valeurs cochées restent proposées même si plus aucune bobine ne les porte,
+// pour pouvoir les décocher.
+type Facets struct {
+	Families  []catalog.Family
+	Materials []catalog.Option
+	Brands    []catalog.Option // Code : marque normalisée (catalog.Fold)
+	Finishes  []catalog.Option
+	Diameters []float64
+}
+
+// Facets calcule les filtres utiles pour ces bobines. Les bobines vides ne comptent
+// que si la recherche les affiche.
+func (q Query) Facets(spools []store.Spool) Facets {
+	fams, mats, fins, dias := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
+	brands := map[string]string{}
+	showEmpty := q.ShowEmpty || slices.Contains(q.Levels, "empty")
+	for _, sp := range spools {
+		if sp.Level == "empty" && !showEmpty {
+			continue
+		}
+		p := sp.Product
+		fams[p.ColorFamily] = true
+		mats[p.Material] = true
+		fins[p.Finish] = true
+		dias[strconv.FormatFloat(p.DiameterMM, 'f', -1, 64)] = true
+		brands[catalog.Fold(p.Brand)] = p.Brand
+	}
+	for _, c := range q.Families {
+		fams[c] = true
+	}
+	for _, c := range q.Materials {
+		mats[c] = true
+	}
+	for _, c := range q.Finishes {
+		fins[c] = true
+	}
+	if q.Diameter != "" {
+		dias[q.Diameter] = true
+	}
+
+	var f Facets
+	for _, fam := range catalog.Families {
+		if fams[fam.Code] {
+			f.Families = append(f.Families, fam)
+		}
+	}
+	keep := func(opts []catalog.Option, present map[string]bool) []catalog.Option {
+		var out []catalog.Option
+		for _, o := range opts {
+			if present[o.Code] {
+				out = append(out, o)
+			}
+		}
+		return out
+	}
+	f.Materials = keep(catalog.Materials, mats)
+	f.Finishes = keep(catalog.Finishes, fins)
+	for _, d := range catalog.Diameters {
+		if dias[strconv.FormatFloat(d, 'f', -1, 64)] {
+			f.Diameters = append(f.Diameters, d)
+		}
+	}
+	for _, b := range q.Brands {
+		if _, ok := brands[b]; !ok {
+			brands[b] = b
+		}
+	}
+	for norm, label := range brands {
+		f.Brands = append(f.Brands, catalog.Option{Code: norm, Label: label})
+	}
+	sort.Slice(f.Brands, func(i, j int) bool { return f.Brands[i].Code < f.Brands[j].Code })
+	return f
+}

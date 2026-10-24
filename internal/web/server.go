@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-webauthn/webauthn/webauthn"
+
 	"github.com/MaximeBranger/filament_manager/internal/auth"
 	"github.com/MaximeBranger/filament_manager/internal/config"
 	"github.com/MaximeBranger/filament_manager/internal/mail"
@@ -31,8 +33,12 @@ type Server struct {
 	// Limites des pages publiques de partage, par IP et par partage.
 	unlockRate *auth.RateLimiter
 	choiceRate *auth.RateLimiter
-	csp        string
-	syncMail   bool // envoi synchrone des emails de notification (tests)
+	// Passkeys : configuration WebAuthn, défis en cours, limite des tentatives par IP.
+	webauthn    *webauthn.WebAuthn
+	ceremonies  *ceremonies
+	passkeyRate *auth.RateLimiter
+	csp         string
+	syncMail    bool // envoi synchrone des emails de notification (tests)
 }
 
 func New(cfg *config.Config, st *store.Store, mailer mail.Mailer, log *slog.Logger, version string) (*Server, error) {
@@ -47,7 +53,19 @@ func New(cfg *config.Config, st *store.Store, mailer mail.Mailer, log *slog.Logg
 
 		unlockRate: auth.NewRateLimiter(5, 15*time.Minute),
 		choiceRate: auth.NewRateLimiter(10, 15*time.Minute),
+
+		ceremonies:  &ceremonies{m: map[string]ceremony{}},
+		passkeyRate: auth.NewRateLimiter(30, 15*time.Minute),
 	}
+	wa, err := webauthn.New(&webauthn.Config{
+		RPID:          cfg.WebAuthnRPID,
+		RPDisplayName: cfg.WebAuthnRPName,
+		RPOrigins:     []string{cfg.Origin()},
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.webauthn = wa
 	pages, err := parseTemplates()
 	if err != nil {
 		return nil, err
@@ -86,6 +104,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	mux.HandleFunc("GET /readyz", s.readyz)
 
+	mux.HandleFunc("GET /manifest.webmanifest", s.manifest)
+	mux.HandleFunc("GET /sw.js", s.serviceWorker)
+	mux.HandleFunc("GET /offline", s.offline)
 	mux.HandleFunc("GET /{$}", s.home)
 	mux.HandleFunc("GET /confidentialite", s.privacy)
 
@@ -98,6 +119,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /signup", s.signupForm)
 	mux.HandleFunc("POST /signup", s.signupSubmit)
 	mux.HandleFunc("POST /logout", s.logout)
+	mux.HandleFunc("POST /auth/passkey/begin", s.passkeyLoginBegin)
+	mux.HandleFunc("POST /auth/passkey/finish", s.passkeyLoginFinish)
 
 	user := func(h http.HandlerFunc) http.Handler { return s.requireUser(h) }
 	mux.Handle("GET /stock", user(s.stockList))
@@ -142,6 +165,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /share/{token}/choice", publicShare(s.shareChoice))
 	mux.Handle("GET /notifications", user(s.notificationsPage))
 	mux.Handle("POST /account/notifications", user(s.accountNotifications))
+	mux.Handle("POST /passkeys/register/begin", user(s.passkeyRegisterBegin))
+	mux.Handle("POST /passkeys/register/finish", user(s.passkeyRegisterFinish))
+	mux.Handle("POST /passkeys/{id}/delete", user(s.passkeyDelete))
 	mux.Handle("GET /account", user(s.accountPage))
 	mux.Handle("POST /account/name", user(s.accountName))
 	mux.Handle("GET /account/export.json", user(s.exportJSON))

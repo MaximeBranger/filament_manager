@@ -197,15 +197,23 @@ func (s *Server) completeLogin(w http.ResponseWriter, r *http.Request, ch *store
 	s.startSession(w, r, user.ID, ch.NextPath)
 }
 
-func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID int64, next string) {
+// createSession ouvre une session et pose son cookie.
+func (s *Server) createSession(w http.ResponseWriter, r *http.Request, userID int64) error {
 	token := auth.NewToken()
 	expires := time.Now().Add(s.cfg.SessionTTL)
 	if err := s.store.CreateSession(r.Context(), auth.HashToken(token), userID, expires); err != nil {
-		s.serverError(w, r, err)
-		return
+		return err
 	}
 	s.setCookie(w, sessionCookie, token, expires)
 	s.clearCookie(w, browserCookie)
+	return nil
+}
+
+func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID int64, next string) {
+	if err := s.createSession(w, r, userID); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	if next = safeNext(next); next == "" {
 		next = "/stock"
 	}

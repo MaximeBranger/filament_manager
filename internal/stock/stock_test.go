@@ -2,6 +2,8 @@ package stock
 
 import (
 	"net/url"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/MaximeBranger/filament_manager/internal/store"
@@ -171,5 +173,35 @@ func TestQueryRoundTrip(t *testing.T) {
 	again := ParseQuery(q.Values())
 	if again.Text != "noir" || len(again.Families) != 2 || again.Near != "#000000" || again.Tolerance != 5 || again.Sort != "brand" {
 		t.Errorf("aller-retour incorrect : %+v", again)
+	}
+}
+
+func TestFacets(t *testing.T) {
+	codes := func(f Facets) (fams, mats, brands []string) {
+		for _, o := range f.Families {
+			fams = append(fams, o.Code)
+		}
+		for _, o := range f.Materials {
+			mats = append(mats, o.Code)
+		}
+		for _, o := range f.Brands {
+			brands = append(brands, o.Code)
+		}
+		return
+	}
+	fams, mats, brands := codes(Query{}.Facets(sample))
+	// Ordre du catalogue ; la bobine rouge, vide, est ignorée.
+	if strings.Join(fams, ",") != "black,orange,blue" || strings.Join(mats, ",") != "PLA,PETG" ||
+		strings.Join(brands, ",") != "bambu lab,esun,polymaker,sunlu" {
+		t.Errorf("facettes = %v %v %v", fams, mats, brands)
+	}
+
+	f := Query{ShowEmpty: true, Families: []string{"green"}, Brands: []string{"prusament"}}.Facets(sample)
+	fams, _, brands = codes(f)
+	if strings.Join(fams, ",") != "black,red,orange,green,blue" || !slices.Contains(brands, "prusament") {
+		t.Errorf("vides et valeurs cochées : %v %v", fams, brands)
+	}
+	if len(f.Diameters) != 1 || len(f.Finishes) != 1 {
+		t.Errorf("diamètres %v, finitions %v", f.Diameters, f.Finishes)
 	}
 }

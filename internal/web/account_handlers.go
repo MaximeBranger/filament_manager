@@ -14,15 +14,26 @@ import (
 	"github.com/MaximeBranger/filament_manager/internal/store"
 )
 
+// renderAccount affiche la page Compte avec la liste des passkeys.
+func (s *Server) renderAccount(w http.ResponseWriter, r *http.Request, status int, data map[string]any) {
+	passkeys, err := s.store.ListPasskeys(r.Context(), currentUser(r).ID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	data["Passkeys"] = passkeys
+	s.render(w, r, status, "account", data)
+}
+
 func (s *Server) accountPage(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, http.StatusOK, "account", map[string]any{"Title": "Mon compte"})
+	s.renderAccount(w, r, http.StatusOK, map[string]any{"Title": "Mon compte"})
 }
 
 func (s *Server) accountName(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
 	name := strings.Join(strings.Fields(r.FormValue("display_name")), " ")
 	if name == "" || len([]rune(name)) > maxNameLength {
-		s.render(w, r, http.StatusUnprocessableEntity, "account", map[string]any{
+		s.renderAccount(w, r, http.StatusUnprocessableEntity, map[string]any{
 			"Title": "Mon compte", "NameError": "Le nom doit faire entre 1 et 50 caractères.",
 		})
 		return
@@ -168,7 +179,7 @@ func (s *Server) exportCSV(w http.ResponseWriter, r *http.Request) {
 func (s *Server) accountDelete(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
 	if !strings.EqualFold(strings.TrimSpace(r.FormValue("confirm_email")), user.Email) {
-		s.render(w, r, http.StatusUnprocessableEntity, "account", map[string]any{
+		s.renderAccount(w, r, http.StatusUnprocessableEntity, map[string]any{
 			"Title": "Mon compte", "DeleteError": "L'adresse saisie ne correspond pas à votre compte.",
 		})
 		return
@@ -180,7 +191,7 @@ func (s *Server) accountDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	switch err := s.store.DeleteUser(r.Context(), user.ID); {
 	case errors.Is(err, store.ErrActiveLoan):
-		s.render(w, r, http.StatusConflict, "account", map[string]any{
+		s.renderAccount(w, r, http.StatusConflict, map[string]any{
 			"Title": "Mon compte", "DeleteError": "Un prêt est en cours (prêté ou emprunté) : clôturez-le avant de supprimer votre compte.",
 		})
 		return

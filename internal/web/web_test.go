@@ -629,3 +629,37 @@ func TestSessionExpires(t *testing.T) {
 		t.Errorf("session expirée acceptée : %d", r.Status)
 	}
 }
+
+func TestPWA(t *testing.T) {
+	app := newTestApp(t)
+	c := app.signup("pwa@example.fr", "Pwa")
+
+	r := c.get("/manifest.webmanifest")
+	var m struct {
+		StartURL string `json:"start_url"`
+		Display  string
+		Icons    []struct{ Src, Purpose string }
+	}
+	if err := json.Unmarshal([]byte(r.Body), &m); err != nil || r.Header.Get("Content-Type") != "application/manifest+json" {
+		t.Fatalf("manifeste : %v %s", err, r.Header.Get("Content-Type"))
+	}
+	if m.StartURL != "/stock" || m.Display != "standalone" || len(m.Icons) != 3 {
+		t.Errorf("manifeste : %+v", m)
+	}
+	for _, icon := range m.Icons {
+		if r := c.get(icon.Src); r.Status != http.StatusOK || r.Header.Get("Content-Type") != "image/png" {
+			t.Errorf("icône %s : %d", icon.Src, r.Status)
+		}
+	}
+
+	r = c.get("/sw.js")
+	if !strings.Contains(r.Body, "const VERSION = 'test'") || r.Header.Get("Cache-Control") != "no-cache" {
+		t.Errorf("service worker : %q", r.Header.Get("Cache-Control"))
+	}
+	if r := c.get("/offline"); r.Status != http.StatusOK || strings.Contains(r.Body, `href="/account"`) || strings.Contains(r.Body, "badge-count") {
+		t.Error("la page hors ligne ne doit contenir aucune donnée de compte (elle est mise en cache)")
+	}
+	if r := c.get("/stock"); !strings.Contains(r.Body, `rel="manifest"`) {
+		t.Error("lien vers le manifeste absent")
+	}
+}

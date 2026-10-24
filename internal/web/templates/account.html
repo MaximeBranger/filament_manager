@@ -11,6 +11,31 @@
   <button class="btn primary">Enregistrer</button>
 </form>
 
+<div class="card">
+  <h2>Passkeys</h2>
+  <p class="muted small">Connectez-vous d'un geste (empreinte, visage, code de l'appareil), sans attendre d'email. Le lien par email reste toujours disponible en secours.</p>
+  {{if .Passkeys}}
+  <ul class="plain-list">
+    {{range .Passkeys}}
+    <li>
+      <span><strong>{{.Name}}</strong> <span class="muted small">ajoutée le {{date .CreatedAt}}{{if not .LastUsedAt.IsZero}}, utilisée le {{date .LastUsedAt}}{{end}}</span></span>
+      <form method="post" action="/passkeys/{{.ID}}/delete" class="inline" data-confirm="Supprimer la passkey « {{.Name}} » ?">
+        <button class="btn small">Supprimer</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{end}}
+  <form id="passkey-register" class="inline-form passkey-form">
+    <label>Nom de l'appareil
+      <input name="name" maxlength="50" placeholder="ex. iPhone, ordinateur du bureau">
+    </label>
+    <button class="btn primary">Ajouter une passkey</button>
+  </form>
+  <p id="passkey-status" class="field-error" role="alert"></p>
+  <p id="passkey-unsupported" class="muted small" hidden>Ce navigateur ne prend pas en charge les passkeys.</p>
+</div>
+
 <form method="post" action="/account/notifications" class="card">
   <h2>Notifications</h2>
   <label class="check"><input type="checkbox" name="email_notifications" value="1"{{if .User.EmailNotifications}} checked{{end}}> Recevoir par email les demandes de prêt, de don et leurs réponses</label>
@@ -37,3 +62,5 @@
   <button class="btn danger">Supprimer mon compte</button>
 </form>
 {{end}}
+
+{{define "scripts"}}<script src="/static/passkeys.js?v={{.Version}}"></script>{{end}}

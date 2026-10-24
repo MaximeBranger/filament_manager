@@ -313,7 +313,17 @@ Règles d'intégrité applicatives (vérifiées dans le code + tests) :
 - **Suppression** : confirmation par saisie de l'email. **Refusée tant qu'un prêt actif existe** (comme prêteur ou emprunteur) ; transactions en attente annulées. Suppression réelle (cascade).
 
 ### 5.5 v2 — Passkeys
-WebAuthn en complément, le lien magique restant le moyen de récupération. Variables prévues : `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`.
+WebAuthn en complément, le lien magique restant le moyen de récupération. Bibliothèque `github.com/go-webauthn/webauthn` (pas de vérification cryptographique maison).
+- **Ajout** depuis « Mon compte » : nom de l'appareil (≤ 50 caractères), passkey **découvrable** obligatoire (`residentKey: required`), vérification de l'utilisateur préférée, attestation `none`, exclusion des passkeys déjà enregistrées. Liste avec dates d'ajout et de dernière utilisation, suppression.
+- **Connexion** sans saisir d'email : bouton « Se connecter avec une passkey » et suggestion du navigateur dans le champ email (médiation conditionnelle, `autocomplete="email webauthn"`). Le paramètre `next` est conservé.
+- **Défis** : gardés en mémoire côté serveur (instance unique), à usage unique, 5 min, référencés par un cookie `webauthn`. Limite de 30 débuts de connexion / 15 min par IP.
+- **Contrôles** : origine = `BASE_URL`, RP ID = `WEBAUTHN_RP_ID` ; compteur de signatures mis à jour à chaque connexion, connexion refusée si le compteur recule (passkey possiblement clonée).
+- **Données** : `users.webauthn_id` (32 octets aléatoires, créé à la première passkey) et table `webauthn_credentials` (identifiant, nom, enregistrement JSON de la bibliothèque, dates). Suppression en cascade avec le compte.
+
+### 5.6 v2 — Application installable (PWA)
+- Manifeste `/manifest.webmanifest` : `start_url` `/stock`, affichage `standalone`, icônes 192 / 512 / maskable, raccourcis Scanner, Réception, Prêts & dons. Icône Apple et `theme-color`.
+- Service worker `/sw.js` (portée `/`, version de l'application injectée, `Cache-Control: no-cache`) : pages toujours chargées depuis le réseau (aucune page privée en cache) avec repli sur `/offline` ; fichiers `/static/` en cache d'abord ; anciens caches supprimés à chaque déploiement.
+- `/offline` : page sans aucune donnée de compte (elle est mise en cache).
 
 ---
 
@@ -583,6 +593,8 @@ L'application **refuse de démarrer** si une variable obligatoire manque ou est 
 | `SHARE_DIR` | Dossier des maillages des partages (v1c), peut être un volume dédié | `/data/shares` |
 | `SHARE_MAX_FILE_SIZE` | Taille maximale d'un STL envoyé (v1c) | `50MB` |
 | `SHARE_MAX_ACTIVE` | Partages actifs par utilisateur (v1c) | `5` |
+| `WEBAUTHN_RP_ID` | Domaine des passkeys (v2) : celui de `BASE_URL` ou un domaine parent. **Le changer rend les passkeys existantes inutilisables.** | domaine de `BASE_URL` |
+| `WEBAUTHN_RP_NAME` | Nom affiché par l'appareil lors de l'ajout d'une passkey (v2) | `FilamentManager` |
 
 ---
 

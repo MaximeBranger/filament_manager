@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -63,17 +62,6 @@ func (s *Server) stockList(w http.ResponseWriter, r *http.Request) {
 	}
 	items := q.Apply(spools)
 
-	// Facettes : seules les marques présentes dans le stock sont proposées au filtre.
-	brands := map[string]string{}
-	for _, sp := range spools {
-		brands[catalog.Fold(sp.Product.Brand)] = sp.Product.Brand
-	}
-	brandOpts := make([]catalog.Option, 0, len(brands))
-	for norm, label := range brands {
-		brandOpts = append(brandOpts, catalog.Option{Code: norm, Label: label})
-	}
-	sort.Slice(brandOpts, func(i, j int) bool { return brandOpts[i].Code < brandOpts[j].Code })
-
 	near := q.Near
 	if near == "" {
 		near = "#1565c0"
@@ -83,7 +71,7 @@ func (s *Server) stockList(w http.ResponseWriter, r *http.Request) {
 		"Query":   q,
 		"Items":   items,
 		"Total":   len(spools),
-		"Brands":  brandOpts,
+		"Facets":  q.Facets(spools),
 		"Near":    near,
 		"Friends": friends,
 		"Friend":  friend,

@@ -59,6 +59,19 @@
     if (msg && !window.confirm(msg)) e.preventDefault();
   });
 
+  // Menu « Plus » de la barre mobile : un clic ailleurs le referme.
+  document.addEventListener('click', (e) => {
+    const menu = document.querySelector('.tabbar-more[open]');
+    if (menu && !menu.contains(e.target)) menu.open = false;
+  });
+
+  // Application installable : le service worker fournit la page hors ligne et le cache des fichiers statiques.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
+  }
+
   // Si la session a expiré pendant une requête htmx, on suit la redirection vers la connexion.
   document.addEventListener('htmx:responseError', (e) => {
     const target = e.detail.xhr.getResponseHeader('HX-Redirect');
