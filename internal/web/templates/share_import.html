@@ -1,0 +1,34 @@
+{{define "content"}}
+<h1>Importer un modèle</h1>
+{{with .Model}}
+<div class="card import-source">
+  <strong>{{.Title}}</strong>
+  <span class="muted small">{{if .Author}}par {{.Author}} · {{end}}{{.Source}}{{with .License}} · licence {{.}}{{end}}</span>
+  <a class="small" href="{{.URL}}" target="_blank" rel="noopener noreferrer">Voir la page du modèle</a>
+</div>
+{{end}}
+
+<form method="post" action="/shares/import" class="card">
+  {{with .Error}}<p class="field-error" role="alert">{{.}}</p>{{end}}
+  <input type="hidden" name="url" value="{{.URL}}">
+  <fieldset class="import-files">
+    <legend>Fichier à partager</legend>
+    {{range .Model.Files}}
+    <label class="check">
+      <input type="radio" name="file" value="{{.ID}}" required{{if eq .ID $.FileID}} checked{{end}}{{if gt .Size $.MaxSize}} disabled{{end}}>
+      <span>{{.Name}}{{if .Size}} <span class="muted small">· {{filesize .Size}}{{if gt .Size $.MaxSize}} (au-delà de {{$.MaxSizeMB}} Mo){{end}}</span>{{end}}</span>
+    </label>
+    {{end}}
+  </fieldset>
+  <div class="grid">
+    <label>Titre
+      <input name="title" value="{{.ShareTitle}}" required maxlength="100">
+    </label>
+    <label>Mot de passe (facultatif, 6 caractères minimum)
+      <input type="password" name="password" minlength="6" maxlength="200" autocomplete="new-password">
+    </label>
+  </div>
+  <p class="notice small">Le destinataire verra l'auteur, la licence et le lien du modèle. Le partage dure 7 jours. Pour un 3MF, seule la géométrie est reprise (une couleur).</p>
+  <div class="actions"><a class="btn" href="/shares/new">Annuler</a><button class="btn primary">Créer le partage</button></div>
+</form>
+{{end}}

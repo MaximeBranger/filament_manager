@@ -78,6 +78,12 @@ var funcs = template.FuncMap{
 	},
 	"hex":    stock.EffectiveHex,
 	"swatch": swatchStyle,
+	"filesize": func(n int64) string {
+		if n < 1<<20 {
+			return strconv.FormatInt(max(n>>10, 1), 10) + " ko"
+		}
+		return strings.Replace(strconv.FormatFloat(float64(n)/(1<<20), 'f', 1, 64), ".", ",", 1) + " Mo"
+	},
 	"mm": func(v float64) string {
 		return strings.Replace(strconv.FormatFloat(v, 'f', 1, 64), ".", ",", 1)
 	},

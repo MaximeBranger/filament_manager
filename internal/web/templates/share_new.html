@@ -1,10 +1,24 @@
 {{define "content"}}
 <h1>Nouveau partage</h1>
+
+<form method="get" action="/shares/import" class="card">
+  <h2>Importer depuis un lien</h2>
+  {{with .ImportError}}<p class="field-error" role="alert">{{.}}</p>{{end}}
+  <div class="inline-form">
+    <label>Lien du modèle
+      <input type="url" name="url" value="{{.ImportURL}}" required maxlength="2048" placeholder="https://www.printables.com/model/…" inputmode="url">
+    </label>
+    <button class="btn primary">Continuer</button>
+  </div>
+  <p class="small muted">Printables (modèles gratuits), Thingiverse, ou lien direct vers un fichier .stl ou .3mf. Vous choisirez ensuite le fichier à partager.</p>
+</form>
+
 <form method="post" action="/shares" enctype="multipart/form-data" class="card">
+  <h2>Ou envoyer un fichier</h2>
   {{with .Error}}<p class="field-error" role="alert">{{.}}</p>{{end}}
   <div class="grid">
-    <label class="full">Fichier STL (maximum {{.MaxSizeMB}} Mo, 1 million de triangles)
-      <input type="file" name="file" accept=".stl,model/stl,application/sla" required>
+    <label class="full">Fichier STL ou 3MF (maximum {{.MaxSizeMB}} Mo, 1 million de triangles)
+      <input type="file" name="file" accept=".stl,.3mf,model/stl,model/3mf,application/sla" required>
     </label>
     <label>Titre (par défaut : nom du fichier)
       <input name="title" value="{{.ShareTitle}}" maxlength="100">
@@ -13,7 +27,7 @@
       <input type="password" name="password" minlength="6" maxlength="200" autocomplete="new-password">
     </label>
   </div>
-  <p class="notice small">Le destinataire peut techniquement récupérer le modèle 3D. Le partage dure 7 jours, puis tout est supprimé ; il ne peut pas être prolongé.</p>
+  <p class="notice small">Le destinataire peut techniquement récupérer le modèle 3D. Le partage dure 7 jours, puis tout est supprimé ; il ne peut pas être prolongé. Pour un 3MF, seule la géométrie est reprise (une couleur).</p>
   <div class="actions"><a class="btn" href="/shares">Annuler</a><button class="btn primary">Créer le partage</button></div>
 </form>
 {{end}}

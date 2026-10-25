@@ -14,10 +14,11 @@ Ce document est la référence pour l'implémentation. Les décisions qu'il cont
 | **v1b** | Amis (invitation par lien), consultation du stock des amis, prêts, dons, notifications (in-app + email) |
 | **v1c** | Partage de modèle 3D : envoi d'un STL, lien public temporaire (mot de passe facultatif), aperçu 3D dans les couleurs du stock, choix du destinataire notifié (§9) |
 | **v2** | Passkeys (WebAuthn), PWA (manifest, service worker, installable) |
+| **v2.1** | Import d'un modèle depuis un lien (Printables, Thingiverse, lien direct), lecture des 3MF (§9.8) |
 
 Hors périmètre v1 : API EAN externe interrogée à l'exécution (la référence des codes-barres est embarquée, §6.5), catalogue de produits partagé, dates de retour / relances de prêt, captcha, multilingue (FR uniquement), tests E2E navigateur.
 
-Hors périmètre v1c : 3MF et rendu multicolore, plusieurs fichiers par partage, textures procédurales (bois, marbre, carbone), import depuis un dépôt de modèles (§14).
+Hors périmètre v1c : rendu multicolore des 3MF, plusieurs fichiers par partage, textures procédurales (bois, marbre, carbone).
 
 ---
 
@@ -456,7 +457,7 @@ Permet d'envoyer un modèle 3D à **n'importe qui** (sans compte) via un lien, p
 
 ### 9.1 Création (utilisateur connecté)
 - Écran « Partages » : liste des partages actifs (miniature et titre cliquables vers l'aperçu, fichier et dimensions, expiration, mot de passe oui/non, verrouillé, lien public à copier, choix du destinataire), bouton « Nouveau partage ». Le partage qui vient d'être créé est mis en avant.
-- Formulaire : fichier STL (un seul), titre (prérempli avec le nom du fichier), mot de passe facultatif (≥ 6 caractères).
+- Formulaire : import depuis un lien (§9.8) ou fichier STL / 3MF (un seul), titre (prérempli avec le nom du fichier), mot de passe facultatif (≥ 6 caractères).
 - Avertissement affiché à la création : « Le destinataire peut techniquement récupérer le modèle 3D. »
 - Durée **fixe de 7 jours**, non prolongeable (recréer un partage si besoin).
 - Lien `BASE_URL/share/<token>` : jeton dérivé par HMAC (`SESSION_SECRET`) d'un aléa de 32 octets (`link_nonce`) ; seule son empreinte sert à la recherche. Le créateur le retrouve à tout moment dans la liste, sans qu'il soit stocké en clair (une fuite de la base seule ne le révèle pas). Si `SESSION_SECRET` change, les liens existants restent valides mais ne sont plus affichables. Rappel de transmettre le mot de passe par un autre canal.
@@ -465,7 +466,7 @@ Permet d'envoyer un modèle 3D à **n'importe qui** (sans compte) via un lien, p
 
 ### 9.2 Traitement du STL
 À l'envoi, le serveur lit le fichier en mémoire (`http.MaxBytesReader`) et **le convertit** ; tout échec = rejet avec message explicite, rien n'est écrit.
-- Formats acceptés : STL binaire (taille = 84 + 50 × n) ou ASCII (`solid … endsolid`).
+- Formats acceptés : STL binaire (taille = 84 + 50 × n) ou ASCII (`solid … endsolid`) ; 3MF (archive zip), géométrie seule : objets de la section `build`, composants (y compris dans d'autres fichiers, extension Production) et transformations appliqués, unités converties en mm, supports ignorés. Volume décompressé plafonné à 4 × `SHARE_MAX_FILE_SIZE`, 8 niveaux de composants au plus.
 - Validation : au moins 1 triangle, au plus **1 000 000** triangles, coordonnées finies (pas de NaN / Inf). Unité supposée : mm.
 - Normalisation : recentrage en X/Y, Z minimum ramené à 0. Calcul des dimensions (boîte englobante, mm).
 - Écriture d'un maillage binaire compact propre à l'application (en-tête `FMM1`, nombre de triangles, positions `float32` non indexées ; normales recalculées côté navigateur) dans `SHARE_DIR/<storage_key>`, via fichier temporaire + renommage.
@@ -520,14 +521,25 @@ Calculées **en direct à chaque affichage** à partir du stock du créateur :
 |---|---|---|
 | GET | `/shares`, `/shares/new` | connecté |
 | POST | `/shares` (multipart) | connecté |
-| POST | `/shares/{id}/password`, `/shares/{id}/revoke` | connecté, propriétaire |
-| GET | `/shares/{id}/preview`, `/shares/{id}/file`, `/shares/{id}/thumb` | connecté, propriétaire (aperçu : le lien public n'est plus connu après sa création) |
+| GET, POST | `/shares/import` (`?url=` / formulaire) | connecté |
+| POST | `/shares/{id}/revoke` | connecté, propriétaire |
+| GET | `/shares/{id}/preview`, `/shares/{id}/file`, `/shares/{id}/thumb` | connecté, propriétaire |
 | GET | `/share/{token}` | public (+ cookie si mot de passe) |
 | POST | `/share/{token}/unlock` | public |
 | GET | `/share/{token}/files/{fileID}` | public (+ cookie si mot de passe) |
 | POST | `/share/{token}/choice` | public (+ cookie si mot de passe) |
 
 Les POST publics restent couverts par `http.CrossOriginProtection` (§10.3).
+
+---
+
+### 9.8 Import depuis un lien
+Le créateur colle un lien ; le serveur liste les fichiers `.stl` / `.3mf` du modèle, le créateur en choisit un, puis le fichier suit le même traitement qu'un envoi (§9.2). Rien n'est conservé entre les deux étapes : le lien est résolu de nouveau à la validation. `GET /shares/import?url=…` ouvre directement le choix du fichier (point d'entrée d'une future extension de navigateur).
+- **Printables** : API GraphQL du site (`api.printables.com/graphql/`, non documentée), sans compte ; modèles payants refusés. Les 3MF figurent avec les STL.
+- **Thingiverse** : API REST officielle avec le jeton d'application `THINGIVERSE_TOKEN` (sans jeton : import indisponible, message explicite).
+- **Lien direct** : toute URL HTTPS dont le chemin finit par `.stl` ou `.3mf`.
+- Sécurité : HTTPS uniquement (redirections comprises, 5 au plus) ; l'adresse IP réellement contactée doit être publique (ni privée, ni boucle locale, ni lien local, ni CGNAT), contrôle fait à la connexion pour résister au rebinding DNS ; pas de mandataire ; délai de 2 min par échange ; fichier plafonné à `SHARE_MAX_FILE_SIZE`, réponses d'API à 2 Mo ; 30 imports / 15 min par utilisateur ; même plafond de conversions simultanées que les envois.
+- Attribution : site, lien, titre, auteur et licence du modèle sont enregistrés avec le fichier (`share_files.source_*`) et affichés au destinataire (licences CC BY).
 
 ---
 
@@ -616,6 +628,7 @@ L'application **refuse de démarrer** si une variable obligatoire manque ou est 
 | `SHARE_DIR` | Dossier des maillages des partages (v1c), peut être un volume dédié | `/data/shares` |
 | `SHARE_MAX_FILE_SIZE` | Taille maximale d'un STL envoyé (v1c) | `50MB` |
 | `SHARE_MAX_ACTIVE` | Partages actifs par utilisateur (v1c) | `5` |
+| `THINGIVERSE_TOKEN` | Jeton d'application Thingiverse (thingiverse.com/developers) : active l'import depuis Thingiverse (§9.8) | vide |
 | `WEBAUTHN_RP_ID` | Domaine des passkeys (v2) : celui de `BASE_URL` ou un domaine parent. **Le changer rend les passkeys existantes inutilisables.** | domaine de `BASE_URL` |
 | `WEBAUTHN_RP_NAME` | Nom affiché par l'appareil lors de l'ajout d'une passkey (v2) | `FilamentManager` |
 
@@ -655,5 +668,5 @@ L'application **refuse de démarrer** si une variable obligatoire manque ou est 
 
 - Modèle GitHub Actions et stratégie de tags d'image (à fournir).
 - Nom de domaine → `BASE_URL`, `SMTP_FROM`, `PLAUSIBLE_DOMAIN`.
-- **Import depuis un dépôt de modèles** (Printables, Thingiverse…, lot ultérieur à v1c) : fournir une URL et laisser l'application récupérer le modèle. À spécifier : API et conditions d'utilisation de chaque site, protection SSRF (liste blanche de domaines, pas d'IP privées, taille et délai bornés), archives zip multi-fichiers (nécessite plusieurs `share_files` par partage).
+- **Extension de navigateur** « Ajouter dans FilamentManager » : ouvrir `/shares/import?url=<page>` ; pour les sites sans accès serveur (MakerWorld, compte requis), téléverser le fichier depuis le navigateur connecté.
 - **3MF / multicolore** (après v1c) : une couleur par pièce ou par objet.

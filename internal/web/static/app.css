@@ -308,6 +308,10 @@ section > h2 { margin-top: 1.5rem; }
 .danger-tag { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
 .choice { display: flex; gap: .75rem; align-items: flex-start; padding: .6rem; background: var(--bg); border-radius: 8px; }
 .share-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: .75rem; }
+.import-source { display: flex; flex-direction: column; gap: .2rem; }
+.import-files { border: 0; padding: 0; margin: 0 0 1rem; display: grid; gap: .5rem; }
+.import-files legend { font-weight: 600; margin-bottom: .5rem; padding: 0; }
+.import-files label { overflow-wrap: anywhere; }
 .share-link { margin-top: .75rem; align-items: center; }
 .share-link input { flex: 1; min-width: 0; }
 

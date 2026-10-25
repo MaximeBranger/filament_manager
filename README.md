@@ -65,6 +65,7 @@ docker run -d --name filament-manager \
 - **Taille des envois** : NPM limite le corps des requêtes à environ 1 Mo par défaut. Pour envoyer des STL, ajoutez dans la configuration avancée du proxy host `client_max_body_size 51m;` (au-dessus de `SHARE_MAX_FILE_SIZE`).
 - **Sauvegardes** : une copie cohérente de la base est écrite dans `/backups` au démarrage, puis toutes les `BACKUP_INTERVAL`. C'est ce dossier que la sauvegarde externe doit récupérer.
 - **Modèles 3D partagés** : `SHARE_DIR` sur un volume dédié, à exclure des sauvegardes (les partages ne vivent que 7 jours).
+- **Import depuis un lien** : Printables et les liens directs fonctionnent sans configuration. Pour Thingiverse, créez une application sur thingiverse.com/developers et passez son jeton dans `THINGIVERSE_TOKEN`. Le conteneur doit pouvoir sortir en HTTPS vers Internet.
 - **Passkeys** : elles sont liées au domaine (`WEBAUTHN_RP_ID`, par défaut celui de `BASE_URL`). Changer de domaine les rend inutilisables ; le lien par email reste disponible.
 - **Santé** : `/healthz` (processus) et `/readyz` (base de données). L'image embarque un `HEALTHCHECK`.
 

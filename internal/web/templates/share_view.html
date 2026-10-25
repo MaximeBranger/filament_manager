@@ -3,6 +3,7 @@
   {{if .Preview}}<p class="notice small">Aperçu : c'est ce que verra votre destinataire. <a href="/shares">Retour aux partages</a></p>{{end}}
   <h1>{{.Share.OwnerName}} vous propose « {{.Share.Title}} »</h1>
   <p class="muted">{{mm .Share.File.SizeX}} × {{mm .Share.File.SizeY}} × {{mm .Share.File.SizeZ}} mm · disponible jusqu'au {{date .Share.ExpiresAt}}</p>
+  {{with .Share.File.Source}}{{if .URL}}<p class="small muted">Modèle « {{.Title}} »{{with .Author}} par {{.}}{{end}}{{with .License}}, licence {{.}}{{end}} · <a href="{{.URL}}" target="_blank" rel="noopener noreferrer nofollow">{{.Site}}</a></p>{{end}}{{end}}
 </div>
 
 <p class="small muted">Les couleurs et finitions affichées sont indicatives et peuvent différer du rendu réel.</p>

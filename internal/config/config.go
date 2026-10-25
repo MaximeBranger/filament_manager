@@ -49,6 +49,8 @@ type Config struct {
 	ShareDir         string
 	ShareMaxFileSize int64
 	ShareMaxActive   int
+	// ThingiverseToken (jeton d'application) active l'import depuis Thingiverse.
+	ThingiverseToken string
 
 	WebAuthnRPID   string
 	WebAuthnRPName string
@@ -136,6 +138,8 @@ func Load(getenv func(string) string) (*Config, error) {
 	if c.ShareMaxActive < 1 {
 		p.fail("SHARE_MAX_ACTIVE", "doit être ≥ 1")
 	}
+
+	c.ThingiverseToken = p.str("THINGIVERSE_TOKEN", "")
 
 	c.WebAuthnRPName = p.str("WEBAUTHN_RP_NAME", "FilamentManager")
 	if c.BaseURL != nil {

@@ -26,6 +26,8 @@ const (
 	sharePurgeEvery   = 15 * time.Minute
 
 	maxConcurrentUploads = 2
+	// maxUnzippedFactor borne le volume décompressé d'un 3MF, en multiple de la taille maximale de fichier.
+	maxUnzippedFactor = 4
 )
 
 // Créateur -------------------------------------------------------------------------------
@@ -203,33 +205,49 @@ func (s *Server) shareCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(data) == 0 {
-		s.renderShareForm(w, r, http.StatusUnprocessableEntity, title, "Choisissez un fichier STL.")
+		s.renderShareForm(w, r, http.StatusUnprocessableEntity, title, "Choisissez un fichier STL ou 3MF.")
 		return
 	}
+	s.publishShare(w, r, shareInput{title: title, password: password, filename: filename, data: data},
+		func(status int, msg string) { s.renderShareForm(w, r, status, title, msg) })
+}
+
+// shareInput est un modèle prêt à partager, envoyé directement ou importé depuis un lien.
+type shareInput struct {
+	title, password, filename string
+	data                      []byte
+	source                    store.ShareSource
+}
+
+// publishShare valide le modèle, le convertit, enregistre le partage et affiche la liste.
+// fail affiche une erreur de saisie sur le formulaire d'origine.
+func (s *Server) publishShare(w http.ResponseWriter, r *http.Request, in shareInput, fail func(status int, msg string)) {
+	user := currentUser(r)
+	title := in.title
 	if title == "" {
-		title = strings.TrimSuffix(filename, filepath.Ext(filename))
+		title = strings.TrimSuffix(in.filename, filepath.Ext(in.filename))
 	}
 	title = strings.Join(strings.Fields(title), " ")
 	if title == "" || len([]rune(title)) > maxShareTitle {
-		s.renderShareForm(w, r, http.StatusUnprocessableEntity, title, "Le titre doit faire entre 1 et 100 caractères.")
+		fail(http.StatusUnprocessableEntity, "Le titre doit faire entre 1 et 100 caractères.")
 		return
 	}
-	if password != "" && (len([]rune(password)) < share.MinPasswordLength || len(password) > maxPasswordLength) {
-		s.renderShareForm(w, r, http.StatusUnprocessableEntity, title, "Le mot de passe doit faire au moins 6 caractères.")
+	if in.password != "" && (len([]rune(in.password)) < share.MinPasswordLength || len(in.password) > maxPasswordLength) {
+		fail(http.StatusUnprocessableEntity, "Le mot de passe doit faire au moins 6 caractères.")
 		return
 	}
 
-	mesh, err := share.ParseSTL(data)
+	mesh, err := share.Parse(in.data, maxUnzippedFactor*s.cfg.ShareMaxFileSize)
 	if err != nil {
-		s.renderShareForm(w, r, http.StatusUnprocessableEntity, title, "Fichier refusé : "+err.Error()+".")
+		fail(http.StatusUnprocessableEntity, "Fichier refusé : "+err.Error()+".")
 		return
 	}
-	data = nil // le STL d'origine n'est plus utile
+	in.data = nil // le fichier d'origine n'est plus utile
 	encoded := share.EncodeFMM(mesh)
 
 	var passwordHash string
-	if password != "" {
-		if passwordHash, err = share.HashPassword(password); err != nil {
+	if in.password != "" {
+		if passwordHash, err = share.HashPassword(in.password); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
@@ -247,19 +265,19 @@ func (s *Server) shareCreate(w http.ResponseWriter, r *http.Request) {
 	nonce := auth.NewToken()
 	token := auth.DeriveToken(s.cfg.SessionSecret, nonce)
 	id, err := s.store.CreateShare(r.Context(), user.ID, auth.HashToken(token), nonce, title, passwordHash, store.ShareFile{
-		OriginalName: filename, StorageKey: key, Triangles: mesh.Triangles(),
-		SizeX: mesh.Size[0], SizeY: mesh.Size[1], SizeZ: mesh.Size[2], Bytes: int64(len(encoded)),
+		OriginalName: in.filename, StorageKey: key, Triangles: mesh.Triangles(),
+		SizeX: mesh.Size[0], SizeY: mesh.Size[1], SizeZ: mesh.Size[2], Bytes: int64(len(encoded)), Source: in.source,
 	}, s.cfg.ShareMaxActive, shareTTL)
 	if err != nil {
 		s.removeShareFiles([]string{key})
 		if errors.Is(err, store.ErrTooManyShares) {
-			s.renderShareForm(w, r, http.StatusConflict, title, "Nombre maximal de partages actifs atteint.")
+			fail(http.StatusConflict, "Nombre maximal de partages actifs atteint.")
 			return
 		}
 		s.serverError(w, r, err)
 		return
 	}
-	s.log.Info("partage créé", "user_id", user.ID, "triangles", mesh.Triangles())
+	s.log.Info("partage créé", "user_id", user.ID, "triangles", mesh.Triangles(), "source", in.source.Site)
 	s.renderShares(w, r, id, passwordHash != "")
 }
 

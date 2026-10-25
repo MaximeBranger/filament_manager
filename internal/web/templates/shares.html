@@ -15,6 +15,7 @@
       <span class="share-name">{{.Title}}</span>
       <span class="muted small">{{.File.OriginalName}} · {{mm .File.SizeX}} × {{mm .File.SizeY}} × {{mm .File.SizeZ}} mm</span>
       <span class="muted small">Expire le {{date .ExpiresAt}}</span>
+      {{with .File.Source.Site}}<span class="muted small">Importé de {{.}}</span>{{end}}
       <span>
         {{if .HasPassword}}<span class="tag">Mot de passe</span>{{else}}<span class="tag">Lien seul</span>{{end}}
         {{if .Locked}}<span class="tag danger-tag">Verrouillé</span>{{end}}

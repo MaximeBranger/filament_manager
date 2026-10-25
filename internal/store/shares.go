@@ -30,6 +30,16 @@ type ShareFile struct {
 	SizeY        float64
 	SizeZ        float64
 	Bytes        int64
+	Source       ShareSource // vide pour un fichier envoyé directement
+}
+
+// ShareSource décrit la provenance d'un modèle importé depuis un lien.
+type ShareSource struct {
+	Site    string
+	URL     string
+	Title   string
+	Author  string
+	License string
 }
 
 type ShareChoice struct {
@@ -64,6 +74,7 @@ func (sh Share) Locked() bool      { return !sh.LockedAt.IsZero() }
 const shareSelect = `SELECT sh.id, sh.user_id, u.display_name, sh.title, sh.token_hash, sh.link_nonce, sh.password_hash, sh.password_version,
 	sh.failed_attempts, sh.locked_at, sh.created_at, sh.expires_at,
 	f.id, f.original_name, f.storage_key, f.triangles, f.size_x_mm, f.size_y_mm, f.size_z_mm, f.bytes,
+	f.source_site, f.source_url, f.source_title, f.source_author, f.source_license,
 	c.product_id, c.label, c.color_hex, c.recipient_name, c.message, c.updated_at
 	FROM shares sh
 	JOIN users u ON u.id = sh.user_id
@@ -79,6 +90,7 @@ func scanShare(row interface{ Scan(...any) error }) (*Share, error) {
 	err := row.Scan(&sh.ID, &sh.UserID, &sh.OwnerName, &sh.Title, &sh.TokenHash, str{&sh.LinkNonce}, str{&sh.PasswordHash}, &sh.PasswordVersion,
 		&sh.FailedAttempts, ts{&sh.LockedAt}, ts{&sh.CreatedAt}, ts{&sh.ExpiresAt},
 		&f.ID, &f.OriginalName, &f.StorageKey, &f.Triangles, &f.SizeX, &f.SizeY, &f.SizeZ, &f.Bytes,
+		str{&f.Source.Site}, str{&f.Source.URL}, str{&f.Source.Title}, str{&f.Source.Author}, str{&f.Source.License},
 		&choiceProduct, &choiceLabel, &choiceHex, str{&c.RecipientName}, str{&c.Message}, ts{&c.UpdatedAt})
 	if err != nil {
 		return nil, notFound(err)
@@ -111,9 +123,12 @@ func (s *Store) CreateShare(ctx context.Context, userID int64, tokenHash, linkNo
 			return err
 		}
 		id, _ = res.LastInsertId()
+		src := f.Source
 		_, err = tx.ExecContext(ctx, `INSERT INTO share_files (share_id, original_name, storage_key, triangles,
-			size_x_mm, size_y_mm, size_z_mm, bytes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			id, f.OriginalName, f.StorageKey, f.Triangles, f.SizeX, f.SizeY, f.SizeZ, f.Bytes, s.now())
+			size_x_mm, size_y_mm, size_z_mm, bytes, source_site, source_url, source_title, source_author, source_license,
+			created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			id, f.OriginalName, f.StorageKey, f.Triangles, f.SizeX, f.SizeY, f.SizeZ, f.Bytes, nullable(src.Site),
+			nullable(src.URL), nullable(src.Title), nullable(src.Author), nullable(src.License), s.now())
 		return err
 	})
 	return id, err

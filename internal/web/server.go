@@ -16,6 +16,7 @@ import (
 	"github.com/MaximeBranger/filament_manager/internal/auth"
 	"github.com/MaximeBranger/filament_manager/internal/config"
 	"github.com/MaximeBranger/filament_manager/internal/mail"
+	"github.com/MaximeBranger/filament_manager/internal/modelimport"
 	"github.com/MaximeBranger/filament_manager/internal/reference"
 	"github.com/MaximeBranger/filament_manager/internal/store"
 )
@@ -42,6 +43,9 @@ type Server struct {
 	passkeyRate *auth.RateLimiter
 	// uploadSlots borne les conversions de STL simultanées (chacune lit le fichier en mémoire).
 	uploadSlots chan struct{}
+	// importer récupère les modèles depuis un lien ; importRate limite les imports par utilisateur.
+	importer   modelSource
+	importRate *auth.RateLimiter
 	// reference cherche un code-barre dans le catalogue de référence (remplaçable en test).
 	reference func(code string) (reference.Entry, bool)
 	csp       string
@@ -65,6 +69,8 @@ func New(cfg *config.Config, st *store.Store, mailer mail.Mailer, log *slog.Logg
 		ceremonies:  &ceremonies{m: map[string]ceremony{}},
 		passkeyRate: auth.NewRateLimiter(30, 15*time.Minute),
 		uploadSlots: make(chan struct{}, maxConcurrentUploads),
+		importer:    modelimport.New(cfg.ThingiverseToken, cfg.ShareMaxFileSize, "FilamentManager/"+version),
+		importRate:  auth.NewRateLimiter(30, 15*time.Minute),
 		reference:   reference.Lookup,
 	}
 	wa, err := webauthn.New(&webauthn.Config{
@@ -168,6 +174,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /shares", user(s.sharesPage))
 	mux.Handle("GET /shares/new", user(s.shareNew))
 	mux.Handle("POST /shares", user(s.shareCreate))
+	mux.Handle("GET /shares/import", user(s.shareImportForm))
+	mux.Handle("POST /shares/import", user(s.shareImport))
 	mux.Handle("POST /shares/{id}/revoke", user(s.shareRevoke))
 	mux.Handle("GET /shares/{id}/preview", user(s.sharePreview))
 	mux.Handle("GET /shares/{id}/file", user(s.shareOwnerFile))
