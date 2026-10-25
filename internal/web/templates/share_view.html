@@ -5,17 +5,21 @@
   <p class="muted">{{mm .Share.File.SizeX}} × {{mm .Share.File.SizeY}} × {{mm .Share.File.SizeZ}} mm · disponible jusqu'au {{date .Share.ExpiresAt}}</p>
 </div>
 
-<div id="viewer" class="viewer" data-mesh="{{.MeshURL}}">
-  <canvas aria-label="Aperçu 3D du modèle"></canvas>
-  <p class="viewer-status" role="status">Chargement du modèle…</p>
-</div>
-<div class="viewer-tools">
-  <button type="button" class="btn small" id="bg-toggle">Fond sombre</button>
-  <label class="check" id="glow-wrap" hidden><input type="checkbox" id="glow-toggle"> Vue dans le noir</label>
-  <span class="small muted">Faites tourner le modèle à la souris ou au doigt.</span>
-</div>
 <p class="small muted">Les couleurs et finitions affichées sont indicatives et peuvent différer du rendu réel.</p>
-<p class="small notice" id="finish-note" hidden>Rendu non représentatif pour cette finition : seule la couleur de base est affichée.</p>
+
+<!-- Aperçu épinglé en haut de l'écran : chaque couleur choisie plus bas reste visible sans remonter. -->
+<div class="share-stage">
+  <div id="viewer" class="viewer" data-mesh="{{.MeshURL}}">
+    <canvas aria-label="Aperçu 3D du modèle"></canvas>
+    <p class="viewer-status" role="status">Chargement du modèle…</p>
+  </div>
+  <div class="viewer-tools">
+    <button type="button" class="btn small" id="bg-toggle">Fond sombre</button>
+    <label class="check" id="glow-wrap" hidden><input type="checkbox" id="glow-toggle"> Vue dans le noir</label>
+    <span class="small muted">Faites tourner le modèle à la souris ou au doigt.</span>
+  </div>
+  <p class="small notice" id="finish-note" hidden>Rendu non représentatif pour cette finition : seule la couleur de base est affichée.</p>
+</div>
 
 <h2>Couleurs disponibles</h2>
 {{if .Swatches}}

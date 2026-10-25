@@ -322,6 +322,13 @@ section > h2 { margin-top: 1.5rem; }
   margin: 0; color: var(--muted); text-align: center; padding: 1rem;
 }
 .viewer-tools { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin: .6rem 0 .25rem; }
+/* Aperçu épinglé pendant le défilement des couleurs ; hauteur bornée pour laisser la liste visible. */
+.share-stage { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: .5rem 0 .25rem; }
+.share-stage .viewer { max-height: 42svh; }
+.share-stage .notice { margin: .25rem 0 0; }
+@media (max-height: 520px) {
+  .share-stage { position: static; } /* paysage sur mobile : pas assez de hauteur pour épingler */
+}
 .swatches { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); margin-bottom: 1rem; }
 .swatch-option {
   flex-direction: row; align-items: center; gap: .6rem; padding: .5rem .6rem; cursor: pointer;
