@@ -167,7 +167,6 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /shares", user(s.sharesPage))
 	mux.Handle("GET /shares/new", user(s.shareNew))
 	mux.Handle("POST /shares", user(s.shareCreate))
-	mux.Handle("POST /shares/{id}/password", user(s.sharePassword))
 	mux.Handle("POST /shares/{id}/revoke", user(s.shareRevoke))
 	mux.Handle("GET /shares/{id}/preview", user(s.sharePreview))
 	mux.Handle("GET /shares/{id}/file", user(s.shareOwnerFile))

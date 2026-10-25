@@ -188,25 +188,18 @@ func TestSharePassword(t *testing.T) {
 		t.Errorf("maillage avec cookie : %d", r.Status)
 	}
 
-	// Changer le mot de passe invalide les cookies existants.
-	alice.post("/shares/"+strconv.FormatInt(shares[0].ID, 10)+"/password", url.Values{"action": {"set"}, "password": {"nouveau-mdp"}})
-	if r := visitor.get(path); !strings.Contains(r.Body, "protégé par un mot de passe") {
-		t.Error("l'ancien cookie ouvre encore le partage")
-	}
-
 	// 5 essais / 15 min par IP.
 	other := app.newClient()
 	for range 5 {
 		other.post(path+"/unlock", url.Values{"password": {"x"}})
 	}
-	if r := other.post(path+"/unlock", url.Values{"password": {"nouveau-mdp"}}); r.Status != http.StatusTooManyRequests {
+	if r := other.post(path+"/unlock", url.Values{"password": {"sesame123"}}); r.Status != http.StatusTooManyRequests {
 		t.Errorf("6e essai depuis la même IP : %d", r.Status)
 	}
 
-	// Retirer le mot de passe : le lien suffit.
-	alice.post("/shares/"+strconv.FormatInt(shares[0].ID, 10)+"/password", url.Values{"action": {"remove"}})
-	if r := app.newClient().get(path); !strings.Contains(r.Body, "Vase secret") {
-		t.Error("après retrait du mot de passe, le lien doit suffire")
+	// Le mot de passe ne se gère plus après la création.
+	if r := alice.post("/shares/"+strconv.FormatInt(shares[0].ID, 10)+"/password", url.Values{"action": {"remove"}}); r.Status == http.StatusSeeOther {
+		t.Error("le mot de passe ne doit plus pouvoir être retiré")
 	}
 }
 
@@ -227,12 +220,6 @@ func TestShareLockout(t *testing.T) {
 	r := visitor.post(path+"/unlock", url.Values{"password": {"sesame123"}}, "X-Forwarded-For", "198.51.100.1")
 	if r.Status != http.StatusLocked || !strings.Contains(r.Body, "momentanément indisponible") {
 		t.Errorf("partage verrouillé : %d", r.Status)
-	}
-
-	shares, _ := app.store.ListShares(context.Background(), userID(t, app, "alice@example.fr"))
-	alice.post("/shares/"+strconv.FormatInt(shares[0].ID, 10)+"/password", url.Values{"action": {"set"}, "password": {"nouveau-mdp"}})
-	if r := visitor.post(path+"/unlock", url.Values{"password": {"nouveau-mdp"}}, "X-Forwarded-For", "198.51.100.2"); r.Status != http.StatusSeeOther {
-		t.Errorf("après un nouveau mot de passe : %d", r.Status)
 	}
 }
 
@@ -290,7 +277,6 @@ func TestShareIsolationRevokeAndPurge(t *testing.T) {
 	for _, r := range []response{
 		bob.get("/shares/" + id + "/preview"),
 		bob.get("/shares/" + id + "/file"),
-		bob.post("/shares/"+id+"/password", url.Values{"action": {"remove"}}),
 		bob.post("/shares/"+id+"/revoke", nil),
 	} {
 		if r.Status != http.StatusNotFound {
@@ -395,5 +381,26 @@ func TestShareThumbnail(t *testing.T) {
 	alice.post("/shares/"+strconv.FormatInt(shares[0].ID, 10)+"/revoke", nil)
 	if files := shareFiles(t, app); len(files) != 0 {
 		t.Errorf("fichiers restants : %v", files)
+	}
+}
+
+func TestShareLinkStaysAvailable(t *testing.T) {
+	app := newTestApp(t)
+	alice := app.signup("alice@example.fr", "Alice")
+	stockForSharing(alice)
+	path := alice.createShare("Benchy", "")
+
+	// Le lien reste affiché après la création, et c'est bien celui qui ouvre le partage.
+	if r := alice.get("/shares"); !strings.Contains(r.Body, "http://filaments.test"+path) {
+		t.Fatal("le lien doit rester disponible dans la liste des partages")
+	}
+	if r := app.newClient().get(path); !strings.Contains(r.Body, "Benchy") {
+		t.Error("le lien affiché n'ouvre pas le partage")
+	}
+
+	// Secret changé depuis la création : le jeton recalculé ne correspond plus, rien n'est affiché.
+	app.server.cfg.SessionSecret = []byte("un-tout-autre-secret-de-32-caracteres!!")
+	if r := alice.get("/shares"); strings.Contains(r.Body, path) || !strings.Contains(r.Body, "Lien non récupérable") {
+		t.Error("un lien qui ne correspond plus au jeton ne doit pas être affiché")
 	}
 }

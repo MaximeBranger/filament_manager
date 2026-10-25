@@ -46,6 +46,8 @@ type Share struct {
 	UserID          int64
 	OwnerName       string
 	Title           string
+	TokenHash       string
+	LinkNonce       string // vide pour les partages créés avant que le lien soit retrouvable
 	PasswordHash    string
 	PasswordVersion int64
 	FailedAttempts  int
@@ -59,7 +61,7 @@ type Share struct {
 func (sh Share) HasPassword() bool { return sh.PasswordHash != "" }
 func (sh Share) Locked() bool      { return !sh.LockedAt.IsZero() }
 
-const shareSelect = `SELECT sh.id, sh.user_id, u.display_name, sh.title, sh.password_hash, sh.password_version,
+const shareSelect = `SELECT sh.id, sh.user_id, u.display_name, sh.title, sh.token_hash, sh.link_nonce, sh.password_hash, sh.password_version,
 	sh.failed_attempts, sh.locked_at, sh.created_at, sh.expires_at,
 	f.id, f.original_name, f.storage_key, f.triangles, f.size_x_mm, f.size_y_mm, f.size_z_mm, f.bytes,
 	c.product_id, c.label, c.color_hex, c.recipient_name, c.message, c.updated_at
@@ -74,7 +76,7 @@ func scanShare(row interface{ Scan(...any) error }) (*Share, error) {
 	var choiceProduct sql.NullInt64
 	var choiceLabel, choiceHex sql.NullString
 	var c ShareChoice
-	err := row.Scan(&sh.ID, &sh.UserID, &sh.OwnerName, &sh.Title, str{&sh.PasswordHash}, &sh.PasswordVersion,
+	err := row.Scan(&sh.ID, &sh.UserID, &sh.OwnerName, &sh.Title, &sh.TokenHash, str{&sh.LinkNonce}, str{&sh.PasswordHash}, &sh.PasswordVersion,
 		&sh.FailedAttempts, ts{&sh.LockedAt}, ts{&sh.CreatedAt}, ts{&sh.ExpiresAt},
 		&f.ID, &f.OriginalName, &f.StorageKey, &f.Triangles, &f.SizeX, &f.SizeY, &f.SizeZ, &f.Bytes,
 		&choiceProduct, &choiceLabel, &choiceHex, str{&c.RecipientName}, str{&c.Message}, ts{&c.UpdatedAt})
@@ -89,7 +91,7 @@ func scanShare(row interface{ Scan(...any) error }) (*Share, error) {
 }
 
 // CreateShare enregistre un partage et son fichier, dans la limite de max partages actifs.
-func (s *Store) CreateShare(ctx context.Context, userID int64, tokenHash, title, passwordHash string,
+func (s *Store) CreateShare(ctx context.Context, userID int64, tokenHash, linkNonce, title, passwordHash string,
 	f ShareFile, max int, ttl time.Duration) (int64, error) {
 	var id int64
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
@@ -102,8 +104,8 @@ func (s *Store) CreateShare(ctx context.Context, userID int64, tokenHash, title,
 			return ErrTooManyShares
 		}
 		now := s.Now()
-		res, err := tx.ExecContext(ctx, `INSERT INTO shares (user_id, token_hash, title, password_hash, created_at, expires_at)
-			VALUES (?, ?, ?, ?, ?, ?)`, userID, tokenHash, title, nullable(passwordHash),
+		res, err := tx.ExecContext(ctx, `INSERT INTO shares (user_id, token_hash, link_nonce, title, password_hash, created_at, expires_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`, userID, tokenHash, nullable(linkNonce), title, nullable(passwordHash),
 			now.UTC().Format(timeFormat), now.Add(ttl).UTC().Format(timeFormat))
 		if err != nil {
 			return err
@@ -146,21 +148,6 @@ func (s *Store) ShareByID(ctx context.Context, userID, id int64) (*Share, error)
 func (s *Store) ShareByToken(ctx context.Context, tokenHash string) (*Share, error) {
 	return scanShare(s.DB.QueryRowContext(ctx, shareSelect+` WHERE sh.token_hash = ? AND sh.expires_at > ?`,
 		tokenHash, s.now()))
-}
-
-// SetSharePassword change ou retire (hash vide) le mot de passe : les cookies d'accès existants
-// sont invalidés et un éventuel verrouillage est levé.
-func (s *Store) SetSharePassword(ctx context.Context, userID, id int64, passwordHash string) error {
-	res, err := s.DB.ExecContext(ctx, `UPDATE shares SET password_hash = ?, password_version = password_version + 1,
-		failed_attempts = 0, locked_at = NULL WHERE id = ? AND user_id = ? AND expires_at > ?`,
-		nullable(passwordHash), id, userID, s.now())
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound
-	}
-	return nil
 }
 
 // RecordShareFailure compte un mot de passe erroné et verrouille le partage au seuil.

@@ -32,6 +32,13 @@ func HashToken(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// DeriveToken dérive un jeton d'un aléa stocké en base : sans le secret, l'aléa ne révèle rien.
+func DeriveToken(secret []byte, nonce string) string {
+	m := hmac.New(sha256.New, secret)
+	m.Write([]byte("share-link:" + nonce))
+	return base64.RawURLEncoding.EncodeToString(m.Sum(nil))
+}
+
 // NewCode renvoie un code à 6 chiffres uniformément aléatoire.
 func NewCode() string {
 	n, _ := rand.Int(rand.Reader, big.NewInt(1_000_000))

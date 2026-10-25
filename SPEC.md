@@ -245,7 +245,7 @@ CREATE TABLE shares (
   password_hash    TEXT,                     -- NULL = pas de mot de passe ; "pbkdf2-sha256$<iter>$<sel>$<hash>"
   password_version INTEGER NOT NULL DEFAULT 0, -- incrémenté à chaque changement : invalide les cookies d'accès
   failed_attempts  INTEGER NOT NULL DEFAULT 0,
-  locked_at        TEXT,                     -- verrouillé après 20 échecs, levé par un nouveau mot de passe
+  locked_at        TEXT,                     -- verrouillé après 20 échecs, définitif (révoquer et recréer)
   created_at       TEXT NOT NULL,
   expires_at       TEXT NOT NULL             -- created_at + 7 jours
 );
@@ -455,12 +455,12 @@ Permet d'envoyer un modèle 3D à **n'importe qui** (sans compte) via un lien, p
 **Principe directeur : ce n'est jamais un outil de stockage de STL.** Un partage vit 7 jours, puis tout est supprimé (fichier, partage, choix). Le STL d'origine n'est jamais conservé : seul un maillage converti l'est, le temps du partage.
 
 ### 9.1 Création (utilisateur connecté)
-- Écran « Partages » : liste des partages actifs (miniature et titre cliquables vers l'aperçu, fichier et dimensions, expiration, mot de passe oui/non, verrouillé, choix du destinataire), bouton « Nouveau partage ». Le lien affiché après création rappelle le titre.
+- Écran « Partages » : liste des partages actifs (miniature et titre cliquables vers l'aperçu, fichier et dimensions, expiration, mot de passe oui/non, verrouillé, lien public à copier, choix du destinataire), bouton « Nouveau partage ». Le partage qui vient d'être créé est mis en avant.
 - Formulaire : fichier STL (un seul), titre (prérempli avec le nom du fichier), mot de passe facultatif (≥ 6 caractères).
 - Avertissement affiché à la création : « Le destinataire peut techniquement récupérer le modèle 3D. »
 - Durée **fixe de 7 jours**, non prolongeable (recréer un partage si besoin).
-- Après création : affichage du lien `BASE_URL/share/<token>` à copier (jeton 32 octets, montré une seule fois, stocké hashé — comme les invitations) et rappel de transmettre le mot de passe par un autre canal.
-- Actions sur un partage : prévisualiser (vue destinataire), définir / changer / retirer le mot de passe, **révoquer** (suppression immédiate du fichier et du partage).
+- Lien `BASE_URL/share/<token>` : jeton dérivé par HMAC (`SESSION_SECRET`) d'un aléa de 32 octets (`link_nonce`) ; seule son empreinte sert à la recherche. Le créateur le retrouve à tout moment dans la liste, sans qu'il soit stocké en clair (une fuite de la base seule ne le révèle pas). Si `SESSION_SECRET` change, les liens existants restent valides mais ne sont plus affichables. Rappel de transmettre le mot de passe par un autre canal.
+- Actions sur un partage : copier le lien, prévisualiser (vue destinataire), **révoquer** (suppression immédiate du fichier et du partage). Le mot de passe se choisit à la création et ne se modifie plus ensuite.
 - Limites : `SHARE_MAX_ACTIVE` partages actifs par utilisateur (défaut 5), `SHARE_MAX_FILE_SIZE` par fichier (défaut 50 Mo), 2 conversions simultanées au plus sur le serveur (chacune lit le fichier en mémoire ; au-delà : « réessayez dans un instant »).
 
 ### 9.2 Traitement du STL
@@ -503,9 +503,9 @@ Calculées **en direct à chaque affichage** à partir du stock du créateur :
 ### 9.5 Mot de passe (facultatif)
 - Stocké hashé **PBKDF2-SHA256** (`crypto/pbkdf2`, bibliothèque standard), 600 000 itérations, sel aléatoire 16 octets. Non relisible : en cas d'oubli, le créateur en définit un nouveau.
 - Sans saisie valide, le destinataire ne voit qu'une page neutre (ni créateur, ni titre, ni modèle).
-- Saisie correcte → cookie d'accès propre au partage : `Path=/share/<token>`, `HttpOnly`, `Secure`, `SameSite=Lax`, signé HMAC (`SESSION_SECRET`) sur `share_id` + `password_version`, expirant avec le partage. Changer ou retirer le mot de passe incrémente `password_version` et invalide les cookies existants.
+- Saisie correcte → cookie d'accès propre au partage : `Path=/share/<token>`, `HttpOnly`, `Secure`, `SameSite=Lax`, signé HMAC (`SESSION_SECRET`) sur `share_id` + `password_version`, expirant avec le partage.
 - Le maillage et l'envoi du choix exigent aussi ce cookie : l'URL du fichier ne contourne pas le mot de passe.
-- Anti-force brute : 5 essais / 15 min par IP et par partage (en mémoire) ; après **20 échecs cumulés** (toutes IP), le partage est **verrouillé** (`locked_at`), le créateur est notifié (`share_locked`) et le déverrouille en définissant un nouveau mot de passe (compteur remis à zéro).
+- Anti-force brute : 5 essais / 15 min par IP et par partage (en mémoire) ; après **20 échecs cumulés** (toutes IP), le partage est **verrouillé** (`locked_at`), le créateur est notifié (`share_locked`) ; il révoque le partage et en crée un nouveau si besoin.
 
 ### 9.6 Cycle de vie et suppression
 - Tâche de fond toutes les 15 min (même modèle que les sauvegardes) : suppression des fichiers puis des lignes des partages expirés.
@@ -644,7 +644,7 @@ L'application **refuse de démarrer** si une variable obligatoire manque ou est 
 - **v1c — intégration HTTP** :
   - création (taille max, `SHARE_MAX_ACTIVE`), révocation et expiration suppriment fichier + lignes, nettoyage des orphelins au démarrage ;
   - **cloisonnement** : actions `/shares/{id}/…` refusées à un autre utilisateur ; la page publique n'expose aucun champ privé (niveau, prix, fournisseur, notes) ;
-  - mot de passe : page neutre sans cookie, fichier inaccessible sans cookie, limitation par IP, verrouillage à 20 échecs + notification, déverrouillage par nouveau mot de passe ;
+  - mot de passe : page neutre sans cookie, fichier inaccessible sans cookie, limitation par IP, verrouillage à 20 échecs + notification ;
   - choix : remplacement du précédent, notification + email au créateur, limitation par IP ;
   - suppression de compte : fichiers de partage effacés du disque.
 - Pas de tests E2E navigateur en v1.

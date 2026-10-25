@@ -5,20 +5,10 @@
 </div>
 <p class="muted">Envoyez un modèle 3D à n'importe qui : il le voit dans les couleurs de votre stock et vous indique son choix. Chaque partage est supprimé au bout de 7 jours, modèle compris.</p>
 
-{{with .NewLink}}
-<div class="card highlight">
-  <h2>Lien du partage « {{$.NewTitle}} »</h2>
-  <p class="small">Il n'est affiché <strong>qu'une seule fois</strong> : copiez-le maintenant.{{if $.NewWithPassword}} Transmettez le mot de passe par un autre canal que le lien.{{end}}</p>
-  <div class="inline-form">
-    <input id="share-link" value="{{.}}" readonly aria-label="Lien du partage">
-    <button type="button" class="btn primary" data-copy="share-link">Copier</button>
-  </div>
-</div>
-{{end}}
-
 {{if .Shares}}
 {{range .Shares}}
-<div class="card share-card">
+<div class="card share-card{{if eq .ID $.NewID}} highlight{{end}}">
+  {{if eq .ID $.NewID}}<p class="small"><strong>Partage créé.</strong> Copiez le lien ci-dessous pour l'envoyer ; il reste disponible ici jusqu'à l'expiration.{{if $.NewWithPassword}} Transmettez le mot de passe par un autre canal que le lien.{{end}}</p>{{end}}
   <a class="share-head-link" href="/shares/{{.ID}}/preview">
     <img class="share-thumb" src="/shares/{{.ID}}/thumb" alt="" width="96" height="96" loading="lazy">
     <span class="share-title">
@@ -45,13 +35,17 @@
   <p class="muted small">Pas encore de choix.</p>
   {{end}}
 
+  {{$id := .ID}}{{with index $.Links .ID}}
+  <div class="inline-form share-link">
+    <input id="share-link-{{$id}}" value="{{.}}" readonly aria-label="Lien du partage">
+    <button type="button" class="btn small{{if eq $id $.NewID}} primary{{end}}" data-copy="share-link-{{$id}}">Copier</button>
+  </div>
+  {{else}}
+  <p class="muted small">Lien non récupérable pour ce partage : révoquez-le et créez-en un nouveau si vous l'avez perdu.</p>
+  {{end}}
+
   <div class="share-actions">
     <a class="btn small" href="/shares/{{.ID}}/preview">Aperçu</a>
-    <form method="post" action="/shares/{{.ID}}/password" class="inline-form compact-form">
-      <input type="password" name="password" minlength="6" maxlength="200" autocomplete="new-password" placeholder="{{if .HasPassword}}Nouveau mot de passe{{else}}Définir un mot de passe{{end}}" aria-label="Mot de passe">
-      <button class="btn small" name="action" value="set">{{if .HasPassword}}Changer{{else}}Définir{{end}}</button>
-      {{if .HasPassword}}<button class="btn small" name="action" value="remove" formnovalidate>Retirer</button>{{end}}
-    </form>
     <form method="post" action="/shares/{{.ID}}/revoke" data-confirm="Révoquer ce partage ? Le lien ne fonctionnera plus et le modèle sera supprimé.">
       <button class="btn small danger">Révoquer</button>
     </form>

@@ -17,12 +17,12 @@ func TestShareLifecycle(t *testing.T) {
 	alice := newUser(t, s, "alice@example.fr")
 	bob := newUser(t, s, "bob@example.fr")
 
-	id, err := s.CreateShare(ctx, alice.ID, "h1", "Benchy", "", shareFile("k1"), 2, 7*24*time.Hour)
+	id, err := s.CreateShare(ctx, alice.ID, "h1", "", "Benchy", "", shareFile("k1"), 2, 7*24*time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.CreateShare(ctx, alice.ID, "h2", "Vase", "pw", shareFile("k2"), 2, 7*24*time.Hour)
-	if _, err := s.CreateShare(ctx, alice.ID, "h3", "Trop", "", shareFile("k3"), 2, 7*24*time.Hour); !errors.Is(err, ErrTooManyShares) {
+	s.CreateShare(ctx, alice.ID, "h2", "", "Vase", "pw", shareFile("k2"), 2, 7*24*time.Hour)
+	if _, err := s.CreateShare(ctx, alice.ID, "h3", "", "Trop", "", shareFile("k3"), 2, 7*24*time.Hour); !errors.Is(err, ErrTooManyShares) {
 		t.Errorf("limite de partages actifs : %v", err)
 	}
 
@@ -33,18 +33,8 @@ func TestShareLifecycle(t *testing.T) {
 	if _, err := s.ShareByID(ctx, bob.ID, id); !errors.Is(err, ErrNotFound) {
 		t.Error("Bob accède au partage d'Alice")
 	}
-	if err := s.SetSharePassword(ctx, bob.ID, id, "x"); !errors.Is(err, ErrNotFound) {
-		t.Error("Bob change le mot de passe d'Alice")
-	}
 	if _, err := s.RevokeShare(ctx, bob.ID, id); !errors.Is(err, ErrNotFound) {
 		t.Error("Bob révoque le partage d'Alice")
-	}
-
-	// Changer le mot de passe incrémente la version (invalide les cookies).
-	s.SetSharePassword(ctx, alice.ID, id, "hash")
-	sh, _ = s.ShareByID(ctx, alice.ID, id)
-	if !sh.HasPassword() || sh.PasswordVersion != 1 {
-		t.Errorf("mot de passe : %+v", sh)
 	}
 
 	// Choix du destinataire : le dernier remplace le précédent, le créateur est notifié.
@@ -74,7 +64,7 @@ func TestShareLockout(t *testing.T) {
 	ctx := context.Background()
 	s := newStore(t)
 	alice := newUser(t, s, "alice@example.fr")
-	id, _ := s.CreateShare(ctx, alice.ID, "h", "Benchy", "pw", shareFile("k"), 5, time.Hour)
+	id, _ := s.CreateShare(ctx, alice.ID, "h", "", "Benchy", "pw", shareFile("k"), 5, time.Hour)
 
 	var notified int
 	for i := 1; i <= ShareLockThreshold+2; i++ {
@@ -90,10 +80,8 @@ func TestShareLockout(t *testing.T) {
 	if notified != 1 {
 		t.Errorf("%d notifications de verrouillage, 1 attendue", notified)
 	}
-	s.SetSharePassword(ctx, alice.ID, id, "nouveau")
-	sh, _ := s.ShareByID(ctx, alice.ID, id)
-	if sh.Locked() || sh.FailedAttempts != 0 {
-		t.Errorf("un nouveau mot de passe doit déverrouiller : %+v", sh)
+	if sh, _ := s.ShareByID(ctx, alice.ID, id); !sh.Locked() {
+		t.Errorf("partage non verrouillé : %+v", sh)
 	}
 }
 
@@ -101,8 +89,8 @@ func TestShareExpiryAndUserDeletion(t *testing.T) {
 	ctx := context.Background()
 	s := newStore(t)
 	alice := newUser(t, s, "alice@example.fr")
-	s.CreateShare(ctx, alice.ID, "old", "Ancien", "", shareFile("old"), 5, time.Hour)
-	s.CreateShare(ctx, alice.ID, "new", "Récent", "", shareFile("new"), 5, 7*24*time.Hour)
+	s.CreateShare(ctx, alice.ID, "old", "", "Ancien", "", shareFile("old"), 5, time.Hour)
+	s.CreateShare(ctx, alice.ID, "new", "", "Récent", "", shareFile("new"), 5, 7*24*time.Hour)
 
 	s.Now = func() time.Time { return time.Now().Add(2 * time.Hour) }
 	ids, keys, err := s.ExpiredShares(ctx)

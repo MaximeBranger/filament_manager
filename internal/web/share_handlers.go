@@ -31,21 +31,40 @@ const (
 // Créateur -------------------------------------------------------------------------------
 
 func (s *Server) sharesPage(w http.ResponseWriter, r *http.Request) {
-	s.renderShares(w, r, "", "", false)
+	s.renderShares(w, r, 0, false)
 }
 
-// renderShares affiche la liste ; newLink (affiché une seule fois) et newTitle décrivent le
-// partage qui vient d'être créé.
-func (s *Server) renderShares(w http.ResponseWriter, r *http.Request, newLink, newTitle string, withPassword bool) {
+// renderShares affiche la liste ; newID désigne le partage qui vient d'être créé (mis en avant).
+func (s *Server) renderShares(w http.ResponseWriter, r *http.Request, newID int64, withPassword bool) {
 	shares, err := s.store.ListShares(r.Context(), currentUser(r).ID)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
+	links := make(map[int64]string, len(shares))
+	for _, sh := range shares {
+		if link, ok := s.shareLink(sh); ok {
+			links[sh.ID] = link
+		}
+	}
+	w.Header().Set("Cache-Control", "private, no-store") // la page contient les liens
 	s.render(w, r, http.StatusOK, "shares", map[string]any{
-		"Title": "Partages", "Shares": shares, "NewLink": newLink, "NewTitle": newTitle,
+		"Title": "Partages", "Shares": shares, "Links": links, "NewID": newID,
 		"NewWithPassword": withPassword, "MaxActive": s.cfg.ShareMaxActive,
 	})
+}
+
+// shareLink recalcule le lien public d'un partage. Impossible pour les partages antérieurs à
+// l'aléa, ou si SESSION_SECRET a changé depuis la création (le jeton dérivé ne correspond plus).
+func (s *Server) shareLink(sh store.Share) (string, bool) {
+	if sh.LinkNonce == "" {
+		return "", false
+	}
+	token := auth.DeriveToken(s.cfg.SessionSecret, sh.LinkNonce)
+	if !auth.Equal(auth.HashToken(token), sh.TokenHash) {
+		return "", false
+	}
+	return s.cfg.BaseURL.String() + "/share/" + token, true
 }
 
 // shareThumb sert la miniature d'un partage (créateur uniquement). Les partages créés avant
@@ -225,8 +244,9 @@ func (s *Server) shareCreate(w http.ResponseWriter, r *http.Request) {
 	} else if err := share.Write(s.cfg.ShareDir, share.ThumbKey(key), thumb); err != nil {
 		s.log.Error("écriture de la miniature", "err", err)
 	}
-	token := auth.NewToken()
-	_, err = s.store.CreateShare(r.Context(), user.ID, auth.HashToken(token), title, passwordHash, store.ShareFile{
+	nonce := auth.NewToken()
+	token := auth.DeriveToken(s.cfg.SessionSecret, nonce)
+	id, err := s.store.CreateShare(r.Context(), user.ID, auth.HashToken(token), nonce, title, passwordHash, store.ShareFile{
 		OriginalName: filename, StorageKey: key, Triangles: mesh.Triangles(),
 		SizeX: mesh.Size[0], SizeY: mesh.Size[1], SizeZ: mesh.Size[2], Bytes: int64(len(encoded)),
 	}, s.cfg.ShareMaxActive, shareTTL)
@@ -240,43 +260,7 @@ func (s *Server) shareCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.Info("partage créé", "user_id", user.ID, "triangles", mesh.Triangles())
-	s.renderShares(w, r, s.cfg.BaseURL.String()+"/share/"+token, title, passwordHash != "")
-}
-
-func (s *Server) sharePassword(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(r)
-	if !ok {
-		s.notFound(w, r)
-		return
-	}
-	var hash string
-	if r.FormValue("action") != "remove" {
-		password := r.FormValue("password")
-		if len([]rune(password)) < share.MinPasswordLength || len(password) > maxPasswordLength {
-			s.setFlash(w, "Le mot de passe doit faire au moins 6 caractères.")
-			http.Redirect(w, r, "/shares", http.StatusSeeOther)
-			return
-		}
-		var err error
-		if hash, err = share.HashPassword(password); err != nil {
-			s.serverError(w, r, err)
-			return
-		}
-	}
-	if err := s.store.SetSharePassword(r.Context(), currentUser(r).ID, id, hash); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			s.notFound(w, r)
-			return
-		}
-		s.serverError(w, r, err)
-		return
-	}
-	if hash == "" {
-		s.setFlash(w, "Mot de passe retiré : le lien suffit pour ouvrir le partage.")
-	} else {
-		s.setFlash(w, "Mot de passe enregistré. Transmettez-le par un autre canal que le lien.")
-	}
-	http.Redirect(w, r, "/shares", http.StatusSeeOther)
+	s.renderShares(w, r, id, passwordHash != "")
 }
 
 func (s *Server) shareRevoke(w http.ResponseWriter, r *http.Request) {

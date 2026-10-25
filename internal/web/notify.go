@@ -60,7 +60,7 @@ func notificationText(n store.Notification) (text, link string) {
 	case store.NotifShareChoice:
 		return p.Actor + " a choisi « " + p.Label + " » pour « " + p.Title + " ».", "/shares"
 	case store.NotifShareLocked:
-		return "Le partage « " + p.Title + " » est verrouillé après trop de mots de passe erronés : définissez-en un nouveau pour le rouvrir.", "/shares"
+		return "Le partage « " + p.Title + " » est verrouillé après trop de mots de passe erronés : révoquez-le et créez-en un nouveau si besoin.", "/shares"
 	}
 	return "Nouvelle activité.", "/notifications"
 }
