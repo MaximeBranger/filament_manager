@@ -133,6 +133,12 @@ func productValues(p store.ProductFields) url.Values {
 		}
 	}
 	v.Set("color_hex", hex)
+	hex2 := p.ColorHex2
+	if hex2 == "" {
+		f, _ := catalog.FamilyByCode("multicolor")
+		hex2 = f.Hex
+	}
+	v.Set("color_hex2", hex2)
 	v.Set("finish", p.Finish)
 	v.Set("finish_other", p.FinishOther)
 	v.Set("diameter", strconv.FormatFloat(p.DiameterMM, 'f', -1, 64))
@@ -561,6 +567,7 @@ type productJSON struct {
 	ID    int64  `json:"id"`
 	Label string `json:"label"`
 	Hex   string `json:"hex"`
+	Hex2  string `json:"hex2,omitempty"`
 }
 
 func (s *Server) productLookup(w http.ResponseWriter, r *http.Request) {
@@ -573,7 +580,7 @@ func (s *Server) productLookup(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if p != nil {
-			resp = map[string]any{"found": true, "product": productJSON{p.ID, p.Label(), stock.EffectiveHex(*p)}}
+			resp = map[string]any{"found": true, "product": productJSON{p.ID, p.Label(), stock.EffectiveHex(*p), p.ColorHex2}}
 		} else if e, ok := s.reference(ean); ok {
 			// Inconnu de l'utilisateur mais connu de la référence : valeurs pour préremplir.
 			values := map[string]string{}

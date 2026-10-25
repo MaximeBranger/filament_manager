@@ -90,6 +90,24 @@ func mapFinish(traits map[string]bool, multiColor bool) string {
 	return catalog.DefaultFinish
 }
 
+// twoHexes retient les deux premières teintes distinctes d'un multicolore : la teinte principale,
+// complétée par la liste « color_hexes » (illisible ou absente : ignorée).
+func twoHexes(hex string, raw json.RawMessage) (string, string) {
+	var list []string
+	json.Unmarshal(raw, &list)
+	for _, h := range list {
+		n, err := color.NormalizeHex(h)
+		switch {
+		case err != nil:
+		case hex == "":
+			hex = n
+		case n != hex:
+			return hex, n
+		}
+	}
+	return hex, ""
+}
+
 func mapDiameter(d float64) (float64, bool) {
 	switch {
 	case d == 0 || (d > 1.7 && d < 1.8):
@@ -183,13 +201,17 @@ func Convert(r io.Reader) ([]byte, int, error) {
 		if err != nil {
 			hex = ""
 		}
+		hex2 := ""
+		if family == "multicolor" {
+			hex, hex2 = twoHexes(hex, v.ColorHexes)
+		}
 		weight := int(s.FilamentWeight + 0.5)
 		if weight <= 0 {
 			weight = catalog.DefaultWeight
 		}
 		entries[code] = Entry{
 			Brand: brand, Material: material, MaterialOther: other, Line: f.name,
-			ColorName: strings.TrimSpace(v.Name), ColorFamily: family, ColorHex: hex, Finish: finish,
+			ColorName: strings.TrimSpace(v.Name), ColorFamily: family, ColorHex: hex, ColorHex2: hex2, Finish: finish,
 			DiameterMM: diameter, WeightG: weight,
 		}
 		refill[code] = isRefill

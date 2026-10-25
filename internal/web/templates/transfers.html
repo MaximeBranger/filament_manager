@@ -13,7 +13,7 @@
       {{range .Items}}
       <li class="spool">
         <input type="checkbox" name="accept" value="{{.SpoolID}}" checked aria-label="Accepter {{.Label}}">
-        <span class="swatch" style="background: {{.Hex}}"></span>
+        <span class="swatch" style="{{swatch .Hex .Hex2}}"></span>
         <div class="spool-main"><strong>{{.Label}}</strong></div>
         {{if and (eq $t.Kind "gift") (eq $t.OwnerID $.User.ID)}}
         {{$cur := .Level}}
@@ -41,7 +41,7 @@
   {{range .Sent}}
   <div class="card">
     <p>{{template "transfer_summary" (dict "T" . "Me" $.User.ID)}}</p>
-    <ul class="compact">{{range .Items}}<li><span class="swatch sm" style="background: {{.Hex}}"></span> {{.Label}}</li>{{end}}</ul>
+    <ul class="compact">{{range .Items}}<li><span class="swatch sm" style="{{swatch .Hex .Hex2}}"></span> {{.Label}}</li>{{end}}</ul>
     <form method="post" action="/transfers/{{.ID}}/cancel" class="actions" data-confirm="Annuler cette demande ?">
       <button class="btn small">Annuler</button>
     </form>
@@ -56,7 +56,7 @@
   <ul class="spools">
     {{range .Lent}}
     <li class="spool loan-row">
-      <span class="swatch" style="background: {{.Hex}}"></span>
+      <span class="swatch" style="{{swatch .Hex .Hex2}}"></span>
       <div class="spool-main">
         <strong>{{.Label}}</strong>
         <span class="muted small">À {{.BorrowerName}} depuis le {{date .StartedAt}}</span>
@@ -84,7 +84,7 @@
   <ul class="spools">
     {{range .Borrowed}}
     <li class="spool">
-      <span class="swatch" style="background: {{.Hex}}"></span>
+      <span class="swatch" style="{{swatch .Hex .Hex2}}"></span>
       <div class="spool-main">
         <strong>{{.Label}}</strong>
         <span class="muted small">Prêtée par {{.LenderName}} le {{date .StartedAt}}</span>

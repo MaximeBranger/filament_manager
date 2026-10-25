@@ -514,6 +514,19 @@ func TestProductsAndScan(t *testing.T) {
 		t.Error("la modification du produit doit se refléter sur ses bobines")
 	}
 
+	// Multicolore : seconde teinte et pastille combinée.
+	form = newProductForm("color_family", "multicolor", "color_hex", "#ff0000", "color_hex2", "#0000ff", "ean", "1111111111116")
+	if r := c.post("/products/"+pid, form); r.Status != http.StatusSeeOther {
+		t.Fatalf("produit multicolore : %d\n%s", r.Status, r.Body)
+	}
+	if r := c.get("/stock"); !strings.Contains(r.Body, "linear-gradient(135deg, #ff0000 50%, #0000ff 50%)") {
+		t.Error("pastille combinée attendue pour un multicolore")
+	}
+	json.Unmarshal([]byte(c.get("/api/products/lookup?ean=1111111111116").Body), &lookup)
+	if lookup.Product.Hex2 != "#0000ff" {
+		t.Errorf("seconde teinte absente du lookup : %+v", lookup)
+	}
+
 	// Un produit avec des bobines ne peut pas être supprimé.
 	c.post("/products/"+pid+"/delete", nil)
 	if r := c.get("/products/" + pid); r.Status != http.StatusOK {

@@ -73,6 +73,7 @@ type exportProduct struct {
 	ColorName      string  `json:"color_name"`
 	ColorFamily    string  `json:"color_family"`
 	ColorHex       string  `json:"color_hex,omitempty"`
+	ColorHex2      string  `json:"color_hex2,omitempty"`
 	Finish         string  `json:"finish"`
 	FinishOther    string  `json:"finish_other,omitempty"`
 	DiameterMM     float64 `json:"diameter_mm"`
@@ -118,7 +119,7 @@ func (s *Server) exportJSON(w http.ResponseWriter, r *http.Request) {
 	ps := make([]exportProduct, 0, len(products))
 	for _, p := range products {
 		ps = append(ps, exportProduct{p.ID, p.Brand, p.Material, p.MaterialOther, p.ColorName, p.ColorFamily,
-			p.ColorHex, p.Finish, p.FinishOther, p.DiameterMM, p.NominalWeightG, p.EAN})
+			p.ColorHex, p.ColorHex2, p.Finish, p.FinishOther, p.DiameterMM, p.NominalWeightG, p.EAN})
 	}
 	ss := make([]exportSpool, 0, len(spools))
 	for _, sp := range spools {
@@ -174,7 +175,7 @@ func (s *Server) exportCSV(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("\xef\xbb\xbf")) // BOM : ouverture correcte des accents dans Excel
 	cw := csv.NewWriter(w)
 	cw.Comma = ';'
-	cw.Write([]string{"id", "marque", "matériau", "couleur", "famille", "hexa", "finition", "diamètre (mm)",
+	cw.Write([]string{"id", "marque", "matériau", "couleur", "famille", "hexa", "hexa 2", "finition", "diamètre (mm)",
 		"poids (g)", "code-barre", "niveau", "date d'achat", "prix (€)", "fournisseur", "notes", "masquée aux amis"})
 	for _, sp := range spools {
 		p := sp.Product
@@ -196,7 +197,7 @@ func (s *Server) exportCSV(w http.ResponseWriter, r *http.Request) {
 			hidden = "oui"
 		}
 		cw.Write([]string{strconv.FormatInt(sp.ID, 10), csvSafe(p.Brand), csvSafe(material), csvSafe(p.ColorName), family.Label,
-			stock.EffectiveHex(p), csvSafe(finish), strings.Replace(strconv.FormatFloat(p.DiameterMM, 'f', 2, 64), ".", ",", 1),
+			stock.EffectiveHex(p), p.ColorHex2, csvSafe(finish), strings.Replace(strconv.FormatFloat(p.DiameterMM, 'f', 2, 64), ".", ",", 1),
 			strconv.Itoa(p.NominalWeightG), csvSafe(p.EAN), catalog.LevelLabel(sp.Level), sp.PurchaseDate, price,
 			csvSafe(sp.Supplier), csvSafe(sp.Notes), hidden})
 	}

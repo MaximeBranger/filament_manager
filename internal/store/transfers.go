@@ -33,6 +33,7 @@ type TransferItem struct {
 	Decision string
 	Label    string
 	Hex      string
+	Hex2     string
 	Level    string
 }
 
@@ -492,7 +493,7 @@ func (s *Store) ListTransfers(ctx context.Context, userID int64, limit int) ([]T
 				items.Close()
 				return nil, err
 			}
-			it.Label, it.Hex = p.Label(), p.Hex()
+			it.Label, it.Hex, it.Hex2 = p.Label(), p.Hex(), p.ColorHex2
 			t.Items = append(t.Items, it)
 		}
 		items.Close()
@@ -513,6 +514,7 @@ type Loan struct {
 	EndReason    string
 	Label        string
 	Hex          string
+	Hex2         string
 	Level        string
 }
 
@@ -538,7 +540,7 @@ func (s *Store) ListLoans(ctx context.Context, userID int64, limit int) ([]Loan,
 			ts{&l.StartedAt}, ts{&l.EndedAt}, str{&l.EndReason}, &l.Level}, productDest(&p)...)...); err != nil {
 			return nil, err
 		}
-		l.Label, l.Hex = p.Label(), p.Hex()
+		l.Label, l.Hex, l.Hex2 = p.Label(), p.Hex(), p.ColorHex2
 		out = append(out, l)
 	}
 	return out, rows.Err()

@@ -5,7 +5,7 @@
 
 {{define "product_summary"}}
 <div class="product-summary">
-  <span class="swatch lg" style="background: {{hex .}}"></span>
+  <span class="swatch lg" style="{{swatch (hex .) .ColorHex2}}"></span>
   <div>
     <strong>{{.ColorName}}</strong>
     <div class="muted">{{.Brand}} · {{materialText .}} · {{finishText .}} · {{weight .NominalWeightG}} · {{diameter .DiameterMM}}</div>
@@ -45,6 +45,10 @@
   <label>Teinte exacte
     <input type="color" name="color_hex" class="js-hex" value="{{val .Form "color_hex"}}"{{if ne (val .Form "color_hex") (familyHex $fam)}} data-touched="1"{{end}}>
     {{with ferr .Errors "color_hex"}}<span class="field-error">{{.}}</span>{{end}}
+  </label>
+  <label data-family-for="multicolor"{{if ne $fam "multicolor"}} hidden{{end}}>Seconde teinte
+    <input type="color" name="color_hex2" value="{{val .Form "color_hex2"}}">
+    {{with ferr .Errors "color_hex2"}}<span class="field-error">{{.}}</span>{{end}}
   </label>
   <label>Finition
     {{$fin := val .Form "finish"}}

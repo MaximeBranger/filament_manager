@@ -16,7 +16,7 @@ const hexTolerance = 3
 func (e Entry) Fields(ean string) store.ProductFields {
 	f := store.ProductFields{
 		Brand: e.Brand, Material: e.Material, MaterialOther: e.MaterialOther, ColorName: e.ColorName,
-		ColorFamily: e.ColorFamily, ColorHex: e.ColorHex, Finish: e.Finish, DiameterMM: e.DiameterMM,
+		ColorFamily: e.ColorFamily, ColorHex: e.ColorHex, ColorHex2: e.ColorHex2, Finish: e.Finish, DiameterMM: e.DiameterMM,
 		NominalWeightG: e.WeightG, EAN: ean,
 	}
 	// Teinte identique à celle de la famille : on ne la fige pas (comme à la saisie).
@@ -56,6 +56,13 @@ func formatNumber(v float64) string {
 	return strings.Replace(strconv.FormatFloat(v, 'f', -1, 64), ".", ",", 1)
 }
 
+// sameHex indique si deux teintes sont indiscernables (à hexTolerance près).
+func sameHex(x, y string) bool {
+	a, errA := color.ParseHex(x)
+	b, errB := color.ParseHex(y)
+	return errA == nil && errB == nil && color.Distance(a, b) <= hexTolerance
+}
+
 // Compare liste les écarts entre un produit et sa référence (vide s'ils concordent).
 func Compare(p store.ProductFields, e Entry) []Difference {
 	ref := e.Fields(p.EAN)
@@ -75,11 +82,12 @@ func Compare(p store.ProductFields, e Entry) []Difference {
 	if p.ColorFamily != ref.ColorFamily {
 		add("Famille de couleur", familyLabel(p.ColorFamily), familyLabel(ref.ColorFamily))
 	}
-	mineHex, theirHex := p.Hex(), ref.Hex()
-	a, errA := color.ParseHex(mineHex)
-	b, errB := color.ParseHex(theirHex)
-	if errA != nil || errB != nil || color.Distance(a, b) > hexTolerance {
+	if mineHex, theirHex := p.Hex(), ref.Hex(); !sameHex(mineHex, theirHex) {
 		add("Teinte", mineHex, theirHex)
+	}
+	// Seconde teinte : comparée seulement si la référence en connaît une.
+	if ref.ColorHex2 != "" && !sameHex(p.ColorHex2, ref.ColorHex2) {
+		add("Seconde teinte", p.ColorHex2, ref.ColorHex2)
 	}
 	if mine, theirs := finishText(p.Finish, p.FinishOther), finishText(ref.Finish, ref.FinishOther); p.Finish != ref.Finish || mine != theirs {
 		add("Finition", mine, theirs)

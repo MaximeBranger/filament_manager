@@ -8,7 +8,7 @@
     {{range .Spools}}
     <li class="spool">
       <input type="hidden" name="spool" value="{{.ID}}">
-      <span class="swatch" style="background: {{hex .Product}}"></span>
+      <span class="swatch" style="{{swatch (hex .Product) .Product.ColorHex2}}"></span>
       <div class="spool-main">
         <strong>{{.Product.ColorName}}</strong>
         <span class="muted">{{.Product.Brand}} · {{materialText .Product}} · {{weight .Product.NominalWeightG}}</span>

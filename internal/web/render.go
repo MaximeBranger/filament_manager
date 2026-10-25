@@ -15,6 +15,7 @@ import (
 	_ "time/tzdata"
 
 	"github.com/MaximeBranger/filament_manager/internal/catalog"
+	"github.com/MaximeBranger/filament_manager/internal/color"
 	"github.com/MaximeBranger/filament_manager/internal/stock"
 	"github.com/MaximeBranger/filament_manager/internal/store"
 )
@@ -30,6 +31,20 @@ var paris = func() *time.Location {
 	}
 	return loc
 }()
+
+// swatchStyle renvoie le fond d'une pastille : une teinte, ou deux en diagonale (multicolore).
+// Les teintes sont revalidées : la valeur est marquée sûre pour l'attribut style.
+func swatchStyle(hex, hex2 string) template.CSS {
+	a, err := color.ParseHex(hex)
+	if err != nil {
+		return ""
+	}
+	b, err := color.ParseHex(hex2)
+	if err != nil {
+		return template.CSS("background: " + a.Hex())
+	}
+	return template.CSS("background: linear-gradient(135deg, " + a.Hex() + " 50%, " + b.Hex() + " 50%)")
+}
 
 var funcs = template.FuncMap{
 	"levels":     func() []catalog.Option { return catalog.Levels },
@@ -61,7 +76,8 @@ var funcs = template.FuncMap{
 		}
 		return catalog.FinishLabel(p.Finish)
 	},
-	"hex": stock.EffectiveHex,
+	"hex":    stock.EffectiveHex,
+	"swatch": swatchStyle,
 	"mm": func(v float64) string {
 		return strings.Replace(strconv.FormatFloat(v, 'f', 1, 64), ".", ",", 1)
 	},

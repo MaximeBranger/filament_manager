@@ -3,6 +3,12 @@
 (() => {
   'use strict';
 
+  // Champs propres à une famille de couleur (seconde teinte des multicolores).
+  function syncFamily(select) {
+    const scope = select.closest('form') || document;
+    scope.querySelectorAll('[data-family-for]').forEach((el) => { el.hidden = el.dataset.familyFor !== select.value; });
+  }
+
   function syncOther(select) {
     const scope = select.closest('form') || document;
     const target = scope.querySelector(`[data-other-for="${select.dataset.other}"]`);
@@ -13,6 +19,7 @@
     const el = e.target;
     if (el.matches('select[data-other]')) syncOther(el);
     if (el.matches('select.js-family')) {
+      syncFamily(el);
       const hex = (el.closest('form') || document).querySelector('input.js-hex');
       const opt = el.selectedOptions[0];
       if (hex && opt && hex.dataset.touched !== '1') hex.value = opt.dataset.hex;

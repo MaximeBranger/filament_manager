@@ -25,6 +25,7 @@ type Entry struct {
 	ColorName     string  `json:"color"`
 	ColorFamily   string  `json:"family"`
 	ColorHex      string  `json:"hex,omitempty"`
+	ColorHex2     string  `json:"hex2,omitempty"` // seconde teinte des multicolores
 	Finish        string  `json:"finish"`
 	DiameterMM    float64 `json:"diameter"`
 	WeightG       int     `json:"weight"`

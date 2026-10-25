@@ -39,6 +39,25 @@ func TestParseProduct(t *testing.T) {
 	}
 }
 
+func TestParseProductSecondHex(t *testing.T) {
+	base := []string{"brand", "x", "material", "PLA", "color_name", "x", "color_hex", "#123456"}
+	p, _ := ParseProduct(form(append(base, "color_family", "multicolor", "color_hex2", "#ABCDEF")...))
+	if p.ColorHex2 != "#abcdef" {
+		t.Errorf("seconde teinte d'un multicolore : %q", p.ColorHex2)
+	}
+	// Valeur par défaut du sélecteur (teinte de la famille) : pas de seconde teinte.
+	if p, _ = ParseProduct(form(append(base, "color_family", "multicolor", "color_hex2", "#9e9e9e")...)); p.ColorHex2 != "" {
+		t.Errorf("seconde teinte par défaut figée : %q", p.ColorHex2)
+	}
+	// Ignorée hors famille multicolore.
+	if p, _ = ParseProduct(form(append(base, "color_family", "red", "color_hex2", "#abcdef")...)); p.ColorHex2 != "" {
+		t.Errorf("seconde teinte hors multicolore : %q", p.ColorHex2)
+	}
+	if _, errs := ParseProduct(form(append(base, "color_family", "multicolor", "color_hex2", "zz")...)); errs["color_hex2"] == "" {
+		t.Error("seconde teinte invalide acceptée")
+	}
+}
+
 func TestParseProductErrors(t *testing.T) {
 	_, errs := ParseProduct(form("material", "OTHER", "color_family", "fuchsia", "finish", "OTHER",
 		"color_hex", "zz", "diameter", "3", "weight", "-1", "ean", "!!"))

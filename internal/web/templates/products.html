@@ -15,7 +15,7 @@
 <ul class="spools">
   {{range .Products}}
   <li class="spool">
-    <span class="swatch" style="background: {{hex .}}"></span>
+    <span class="swatch" style="{{swatch (hex .) .ColorHex2}}"></span>
     <a class="spool-main" href="/products/{{.ID}}">
       <strong>{{.ColorName}}</strong>
       <span class="muted">{{.Brand}} · {{materialText .}} · {{finishText .}} · {{weight .NominalWeightG}}{{with .EAN}} · {{.}}{{end}}</span>

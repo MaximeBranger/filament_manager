@@ -15,7 +15,7 @@
   const refLine = document.getElementById('ref-line');
   const newIntro = document.getElementById('new-intro');
 
-  /** @type {{ean: string, productId: number, product: object|null, label: string, hex: string, quantity: number, error: string}[]} */
+  /** @type {{ean: string, productId: number, product: object|null, label: string, hex: string, hex2: string, quantity: number, error: string}[]} */
   const items = [];
   let pendingEAN = null; // code inconnu en cours de saisie : on ignore les autres scans
 
@@ -26,7 +26,7 @@
 
       const swatch = document.createElement('span');
       swatch.className = 'swatch';
-      swatch.style.background = it.hex;
+      swatch.style.background = it.hex2 ? `linear-gradient(135deg, ${it.hex} 50%, ${it.hex2} 50%)` : it.hex;
 
       const main = document.createElement('div');
       main.className = 'spool-main';
@@ -88,7 +88,7 @@
       if (!resp.ok) throw new Error(String(resp.status));
       const data = await resp.json();
       if (data.found) {
-        items.push({ ean, productId: data.product.id, product: null, label: data.product.label, hex: data.product.hex, quantity: 1, error: '' });
+        items.push({ ean, productId: data.product.id, product: null, label: data.product.label, hex: data.product.hex, hex2: data.product.hex2 || '', quantity: 1, error: '' });
         status.textContent = `Ajouté : ${data.product.label}`;
         render();
       } else {
@@ -112,7 +112,7 @@
       newForm.elements.color_hex.dataset.touched = '1'; // la teinte de référence prime sur celle de la famille
     }
     newForm.elements.ean.value = ean;
-    newForm.querySelectorAll('select[data-other]').forEach((s) => s.dispatchEvent(new Event('change', { bubbles: true })));
+    newForm.querySelectorAll('select[data-other], select.js-family').forEach((s) => s.dispatchEvent(new Event('change', { bubbles: true })));
     refNote.hidden = !reference;
     newIntro.hidden = !!reference;
     refLine.textContent = line ? ` (gamme « ${line} »)` : '';
@@ -140,6 +140,9 @@
       product,
       label: `${product.brand} ${materialLabel} ${product.color_name}`,
       hex: product.color_hex,
+      // Comme côté serveur : la teinte par défaut de la famille vaut absence de seconde teinte.
+      hex2: product.color_family === 'multicolor' && product.color_hex2 !== newForm.elements.color_family.selectedOptions[0].dataset.hex
+        ? product.color_hex2 : '',
       quantity: 1,
       error: '',
     });

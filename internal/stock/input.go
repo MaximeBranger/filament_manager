@@ -76,6 +76,16 @@ func ParseProduct(v url.Values) (store.ProductFields, Errors) {
 			p.ColorHex = hex
 		}
 	}
+	// Seconde teinte : multicolores seulement ; la valeur par défaut du sélecteur (celle de la famille) vaut absence.
+	if raw := strings.TrimSpace(v.Get("color_hex2")); raw != "" && p.ColorFamily == "multicolor" {
+		hex, err := color.NormalizeHex(raw)
+		switch {
+		case err != nil:
+			errs["color_hex2"] = "Couleur invalide."
+		case hex != family.Hex:
+			p.ColorHex2 = hex
+		}
+	}
 	if p.Finish == "" {
 		p.Finish = catalog.DefaultFinish
 	}

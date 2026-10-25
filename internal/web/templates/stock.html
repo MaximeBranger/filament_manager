@@ -131,7 +131,7 @@
 {{define "spool_row"}}{{$mine := .Mine}}{{$me := .Me}}{{$select := .Select}}{{$owner := .ShowOwner}}{{with .Item}}
 <li class="spool{{if eq .Level "empty"}} is-empty{{end}}" id="spool-{{.ID}}">
   {{if and $select (not .Loan)}}<input type="checkbox" name="spool" value="{{.ID}}" aria-label="Sélectionner {{.Product.ColorName}}">{{end}}
-  <span class="swatch" style="background: {{.Hex}}"></span>
+  <span class="swatch" style="{{swatch .Hex .Product.ColorHex2}}"></span>
   {{if $mine}}<a class="spool-main" href="/spools/{{.ID}}">{{else}}<div class="spool-main">{{end}}
     <strong>{{.Product.ColorName}}</strong>
     <span class="muted">{{.Product.Brand}} · {{materialText .Product}}{{if ne .Product.Finish "standard"}} · {{finishText .Product}}{{end}} · {{weight .Product.NominalWeightG}}{{if ne .Product.DiameterMM 1.75}} · {{diameter .Product.DiameterMM}}{{end}}</span>

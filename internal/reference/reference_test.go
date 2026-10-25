@@ -78,7 +78,8 @@ func TestConvertMapping(t *testing.T) {
 	}
 
 	// Plusieurs teintes → multicolore.
-	if multi := e["5901234123457"]; multi.Finish != "multicolor" || multi.ColorFamily != "multicolor" {
+	if multi := e["5901234123457"]; multi.Finish != "multicolor" || multi.ColorFamily != "multicolor" ||
+		multi.ColorHex != "#ff8800" || multi.ColorHex2 != "#aa00ff" {
 		t.Errorf("multicolore : %+v", multi)
 	}
 

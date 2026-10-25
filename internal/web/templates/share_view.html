@@ -25,7 +25,7 @@
     <label class="swatch-option">
       <input type="radio" name="product_id" value="{{.ID}}" required{{if eq .ID $.Selected}} checked{{end}}
              data-hex="{{.Hex}}" data-finish="{{.FinishCode}}" data-family="{{.Family}}"{{if .Unrealistic}} data-unrealistic="1"{{end}}>
-      <span class="swatch lg" style="background: {{.Hex}}"></span>
+      <span class="swatch lg" style="{{swatch .Hex .Hex2}}"></span>
       <span class="swatch-text">
         <strong>{{.ColorName}}</strong>
         <span class="muted small">{{.Brand}} · {{.Material}} · {{.Finish}}</span>

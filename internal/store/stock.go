@@ -26,6 +26,7 @@ type ProductFields struct {
 	ColorName      string
 	ColorFamily    string
 	ColorHex       string
+	ColorHex2      string // seconde teinte, famille multicolore uniquement
 	Finish         string
 	FinishOther    string
 	DiameterMM     float64
@@ -90,11 +91,11 @@ func (sp *Spool) StripPrivate() {
 }
 
 const productCols = `p.id, p.user_id, p.brand, p.material, p.material_other, p.color_name, p.color_family,
-	p.color_hex, p.finish, p.finish_other, p.diameter_mm, p.nominal_weight_g, p.ean, p.created_at, p.updated_at`
+	p.color_hex, p.color_hex2, p.finish, p.finish_other, p.diameter_mm, p.nominal_weight_g, p.ean, p.created_at, p.updated_at`
 
 func productDest(p *Product) []any {
 	return []any{&p.ID, &p.UserID, &p.Brand, &p.Material, str{&p.MaterialOther}, &p.ColorName, &p.ColorFamily,
-		str{&p.ColorHex}, &p.Finish, str{&p.FinishOther}, &p.DiameterMM, &p.NominalWeightG, str{&p.EAN},
+		str{&p.ColorHex}, str{&p.ColorHex2}, &p.Finish, str{&p.FinishOther}, &p.DiameterMM, &p.NominalWeightG, str{&p.EAN},
 		ts{&p.CreatedAt}, ts{&p.UpdatedAt}}
 }
 
@@ -199,10 +200,10 @@ func (s *Store) ListProducts(ctx context.Context, userID int64) ([]Product, erro
 func (s *Store) insertProduct(ctx context.Context, q querier, userID int64, f ProductFields) (int64, error) {
 	now := s.now()
 	res, err := q.ExecContext(ctx, `INSERT INTO products (user_id, brand, brand_norm, material, material_other,
-		color_name, color_family, color_hex, finish, finish_other, diameter_mm, nominal_weight_g, ean, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		color_name, color_family, color_hex, color_hex2, finish, finish_other, diameter_mm, nominal_weight_g, ean, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		userID, f.Brand, catalog.Fold(f.Brand), f.Material, nullable(f.MaterialOther), f.ColorName, f.ColorFamily,
-		nullable(f.ColorHex), f.Finish, nullable(f.FinishOther), f.DiameterMM, f.NominalWeightG, nullable(f.EAN), now, now)
+		nullable(f.ColorHex), nullable(f.ColorHex2), f.Finish, nullable(f.FinishOther), f.DiameterMM, f.NominalWeightG, nullable(f.EAN), now, now)
 	if isDuplicateEAN(err) {
 		return 0, ErrDuplicateEAN
 	}
@@ -218,11 +219,11 @@ func (s *Store) CreateProduct(ctx context.Context, userID int64, f ProductFields
 
 func (s *Store) UpdateProduct(ctx context.Context, userID, id int64, f ProductFields) error {
 	res, err := s.DB.ExecContext(ctx, `UPDATE products SET brand = ?, brand_norm = ?, material = ?, material_other = ?,
-		color_name = ?, color_family = ?, color_hex = ?, finish = ?, finish_other = ?, diameter_mm = ?,
+		color_name = ?, color_family = ?, color_hex = ?, color_hex2 = ?, finish = ?, finish_other = ?, diameter_mm = ?,
 		nominal_weight_g = ?, ean = ?, updated_at = ?
 		WHERE id = ? AND user_id = ?`,
 		f.Brand, catalog.Fold(f.Brand), f.Material, nullable(f.MaterialOther), f.ColorName, f.ColorFamily,
-		nullable(f.ColorHex), f.Finish, nullable(f.FinishOther), f.DiameterMM, f.NominalWeightG, nullable(f.EAN),
+		nullable(f.ColorHex), nullable(f.ColorHex2), f.Finish, nullable(f.FinishOther), f.DiameterMM, f.NominalWeightG, nullable(f.EAN),
 		s.now(), id, userID)
 	if isDuplicateEAN(err) {
 		return ErrDuplicateEAN

@@ -529,6 +529,7 @@ type swatch struct {
 	FinishCode  string
 	Family      string
 	Hex         string
+	Hex2        string
 	Unrealistic bool
 }
 
@@ -546,7 +547,7 @@ func toSwatch(p store.Product) swatch {
 	case "marble", "wood", "carbon", "multicolor", catalog.Other:
 		unrealistic = true
 	}
-	return swatch{p.ID, p.ColorName, p.Brand, material, finish, p.Finish, p.ColorFamily, p.Hex(), unrealistic}
+	return swatch{p.ID, p.ColorName, p.Brand, material, finish, p.Finish, p.ColorFamily, p.Hex(), p.ColorHex2, unrealistic}
 }
 
 func (s *Server) renderViewer(w http.ResponseWriter, r *http.Request, sh *store.Share, preview bool, meshURL, choiceAction string) {

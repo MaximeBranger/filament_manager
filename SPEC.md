@@ -63,6 +63,8 @@ Modifier un produit modifie toutes ses bobines (l'UI l'indique : « s'applique �
 | `transparent` | Transparent | `#e0f2f1` |
 | `multicolor` | Multicolore | `#9e9e9e` |
 
+Les listes et filtres présentent les familles par ordre alphabétique de libellé. Un produit multicolore peut porter une seconde teinte (`color_hex2`) : sa pastille est alors coupée en diagonale entre les deux teintes.
+
 ### 3.5 Diamètre
 `1.75` (défaut) ou `2.85` (mm).
 
@@ -128,6 +130,7 @@ CREATE TABLE products (
   color_name       TEXT NOT NULL,
   color_family     TEXT NOT NULL,
   color_hex        TEXT,                  -- NULL => hexa par défaut de la famille
+  color_hex2       TEXT,                  -- seconde teinte, famille multicolor uniquement
   finish           TEXT NOT NULL DEFAULT 'standard',
   finish_other     TEXT,
   diameter_mm      REAL NOT NULL DEFAULT 1.75,
