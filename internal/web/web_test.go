@@ -693,6 +693,10 @@ func TestPublicPagesAndHeaders(t *testing.T) {
 		}
 	}
 	r := c.get("/")
+	// Accueil : inscription en une étape, en haut et en bas de page.
+	if strings.Count(r.Body, `action="/login"`) != 2 || !strings.Contains(r.Body, "plus de ") {
+		t.Error("l'accueil doit proposer le formulaire d'inscription deux fois et le nombre de codes reconnus")
+	}
 	if csp := r.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'self'") {
 		t.Errorf("CSP = %q", csp)
 	}

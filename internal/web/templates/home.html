@@ -1,12 +1,90 @@
 {{define "content"}}
-<section class="hero">
-  <h1>Votre stock de filament, à portée de main.</h1>
-  <p>Listez vos bobines, retrouvez une couleur en un instant, scannez les boîtes à réception.</p>
-  <p><a class="btn primary" href="/login">Se connecter ou créer un compte</a></p>
-  <ul class="features">
-    <li><strong>Scan du code-barre</strong> : une boîte connue est reconnue instantanément.</li>
-    <li><strong>Recherche par couleur</strong> : par nom, par famille, ou par proximité visuelle.</li>
-    <li><strong>Niveau de chaque bobine</strong> : neuve, entamée, moitié, faible, vide.</li>
+<section class="landing-hero">
+  <div class="landing-pitch">
+    <h1>Toutes vos bobines de filament, rangées dans votre poche.</h1>
+    <p class="landing-lead">Scannez vos boîtes, retrouvez la bonne couleur en quelques secondes, prêtez à vos amis et laissez-les choisir la teinte de leur prochaine impression.</p>
+    {{template "landing_cta" "hero"}}
+  </div>
+
+  <!-- Aperçu illustratif du stock (données fictives). -->
+  <div class="landing-demo" aria-hidden="true">
+    <div class="demo-search">
+      <span class="swatch sm" style="background: #1565c0"></span> Proche de ce bleu
+    </div>
+    <ul class="demo-list">
+      <li><span class="swatch" style="background: #152a6b"></span><span><strong>Bleu Nuit</strong><small>PLA · Silk · 1 kg</small></span><span class="level level-new">Neuf</span></li>
+      <li><span class="swatch" style="background: #1e5aa8"></span><span><strong>Cobalt</strong><small>PETG · 1 kg</small></span><span class="level level-half">Moitié</span></li>
+      <li><span class="swatch" style="background: linear-gradient(135deg, #1565c0 50%, #6a1b9a 50%)"></span><span><strong>Galaxie</strong><small>PLA · Multicolore</small></span><span class="level level-started">Entamée</span></li>
+      <li><span class="swatch" style="background: #4c5975"></span><span><strong>Gris Ardoise</strong><small>PLA+ · 1 kg · prêtée à Léa</small></span><span class="level level-low">Faible</span></li>
+    </ul>
+  </div>
+</section>
+
+<section class="landing-steps">
+  <h2>Comment ça marche</h2>
+  <ol>
+    <li><strong>Scannez</strong> le code-barre de la boîte : {{.RefCount}} références sont reconnues d'office, les autres une seule fois.</li>
+    <li><strong>Retrouvez</strong> une bobine par nom, famille ou couleur proche, et suivez son niveau de neuve à vide.</li>
+    <li><strong>Partagez</strong> votre stock avec vos amis, prêtez ou donnez des bobines, faites choisir une couleur sur un modèle 3D.</li>
+  </ol>
+</section>
+
+<section class="landing-features">
+  <h2>Tout ce qu'il faut, rien de plus</h2>
+  <div class="feature-grid">
+    <article>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3M8 9v6M12 9v6M16 9v6"/></svg>
+      <h3>Scan et réception en série</h3>
+      <p>Une commande arrive ? Scannez les boîtes à la suite, tout est ajouté d'un coup.</p>
+    </article>
+    <article>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
+      <h3>Recherche par couleur</h3>
+      <p>Choisissez une teinte : les bobines les plus proches visuellement remontent en premier.</p>
+    </article>
+    <article>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M10 20V4M15 20v-7M20 20v-4"/></svg>
+      <h3>Niveau de chaque bobine</h3>
+      <p>Neuve, entamée, moitié, faible, vide : vous savez quoi racheter avant de manquer.</p>
+    </article>
+    <article>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.3a6.5 6.5 0 0 1 3.5 5.7"/></svg>
+      <h3>Stock entre amis</h3>
+      <p>Consultez le stock de vos amis, demandez un prêt ou un don, suivez qui a quoi.</p>
+    </article>
+    <article>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="m3 7.5 9 4.5 9-4.5M12 12v9"/></svg>
+      <h3>Choix de couleur en 3D</h3>
+      <p>Envoyez un STL : votre destinataire le voit dans les couleurs de votre stock et choisit, sans compte.</p>
+    </article>
+    <article>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18h2"/></svg>
+      <h3>Pensé pour le téléphone</h3>
+      <p>Installable comme une application, utilisable à côté de l'imprimante, sans rien télécharger.</p>
+    </article>
+  </div>
+</section>
+
+<section class="landing-trust">
+  <ul>
+    <li><strong>Sans mot de passe</strong> : lien ou code par email, ou passkey.</li>
+    <li><strong>Vos données vous appartiennent</strong> : export JSON ou CSV et suppression du compte à tout moment.</li>
+    <li><strong>Discret</strong> : pas de publicité, statistiques de visite anonymes.</li>
   </ul>
 </section>
+
+<section class="landing-final">
+  <h2>Faites l'inventaire une fois, gagnez du temps à chaque impression.</h2>
+  {{template "landing_cta" "final"}}
+</section>
+{{end}}
+
+{{/* Formulaire de connexion / inscription en une étape : envoie directement le lien. */}}
+{{define "landing_cta"}}
+<form method="post" action="/login" class="landing-cta">
+  <label class="sr-only" for="email-{{.}}">Adresse email</label>
+  <input id="email-{{.}}" type="email" name="email" required autocomplete="email" placeholder="votre@email.fr">
+  <button class="btn primary">Créer mon stock</button>
+</form>
+<p class="small muted landing-cta-note">Votre compte est créé avec votre seule adresse : vous recevez un lien de connexion. Déjà inscrit ? Même formulaire, ou <a href="/login">connexion par passkey</a>.</p>
 {{end}}

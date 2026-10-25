@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -230,7 +231,16 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/stock", http.StatusSeeOther)
 		return
 	}
-	s.render(w, r, http.StatusOK, "home", nil)
+	_, count := reference.Info()
+	s.render(w, r, http.StatusOK, "home", map[string]any{"RefCount": approxCount(count)})
+}
+
+// approxCount arrondit un effectif au millier inférieur pour l'affichage : « plus de 6 000 ».
+func approxCount(n int) string {
+	if n < 1000 {
+		return strconv.Itoa(n)
+	}
+	return "plus de " + strconv.Itoa(n/1000) + "\u00a0000"
 }
 
 func (s *Server) credits(w http.ResponseWriter, r *http.Request) {
