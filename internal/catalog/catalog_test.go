@@ -67,3 +67,11 @@ func TestReferentials(t *testing.T) {
 		t.Error("libellés inattendus")
 	}
 }
+
+func TestFamiliesSorted(t *testing.T) {
+	for i := 1; i < len(Families); i++ {
+		if Families[i-1].Label > Families[i].Label {
+			t.Errorf("familles non triées : %q avant %q", Families[i-1].Label, Families[i].Label)
+		}
+	}
+}

@@ -191,14 +191,14 @@ func TestFacets(t *testing.T) {
 	}
 	fams, mats, brands := codes(Query{}.Facets(sample))
 	// Ordre du catalogue ; la bobine rouge, vide, est ignorée.
-	if strings.Join(fams, ",") != "black,orange,blue" || strings.Join(mats, ",") != "PLA,PETG" ||
+	if strings.Join(fams, ",") != "blue,black,orange" || strings.Join(mats, ",") != "PLA,PETG" ||
 		strings.Join(brands, ",") != "bambu lab,esun,polymaker,sunlu" {
 		t.Errorf("facettes = %v %v %v", fams, mats, brands)
 	}
 
 	f := Query{ShowEmpty: true, Families: []string{"green"}, Brands: []string{"prusament"}}.Facets(sample)
 	fams, _, brands = codes(f)
-	if strings.Join(fams, ",") != "black,red,orange,green,blue" || !slices.Contains(brands, "prusament") {
+	if strings.Join(fams, ",") != "blue,black,orange,red,green" || !slices.Contains(brands, "prusament") {
 		t.Errorf("vides et valeurs cochées : %v %v", fams, brands)
 	}
 	if len(f.Diameters) != 1 || len(f.Finishes) != 1 {

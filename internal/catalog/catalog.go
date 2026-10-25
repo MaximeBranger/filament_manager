@@ -58,21 +58,22 @@ var Levels = []Option{
 	{"empty", "Vide"},
 }
 
+// Families est trié par libellé : c'est l'ordre des listes et des filtres.
 var Families = []Family{
-	{"black", "Noir", "#1a1a1a"},
-	{"white", "Blanc", "#f5f5f5"},
-	{"grey", "Gris", "#8a8a8a"},
-	{"red", "Rouge", "#c62828"},
-	{"orange", "Orange", "#ef6c00"},
-	{"yellow", "Jaune", "#fbc02d"},
-	{"green", "Vert", "#2e7d32"},
-	{"blue", "Bleu", "#1565c0"},
-	{"purple", "Violet", "#6a1b9a"},
-	{"pink", "Rose", "#ec407a"},
-	{"brown", "Marron", "#6d4c41"},
 	{"beige", "Beige", "#d7c4a3"},
-	{"transparent", "Transparent", "#e0f2f1"},
+	{"white", "Blanc", "#f5f5f5"},
+	{"blue", "Bleu", "#1565c0"},
+	{"grey", "Gris", "#8a8a8a"},
+	{"yellow", "Jaune", "#fbc02d"},
+	{"brown", "Marron", "#6d4c41"},
 	{"multicolor", "Multicolore", "#9e9e9e"},
+	{"black", "Noir", "#1a1a1a"},
+	{"orange", "Orange", "#ef6c00"},
+	{"pink", "Rose", "#ec407a"},
+	{"red", "Rouge", "#c62828"},
+	{"transparent", "Transparent", "#e0f2f1"},
+	{"green", "Vert", "#2e7d32"},
+	{"purple", "Violet", "#6a1b9a"},
 }
 
 var Diameters = []float64{1.75, 2.85}
