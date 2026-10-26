@@ -2,7 +2,7 @@
 
 # Version de correctif épinglée (comme la directive toolchain de go.mod) : l'image officielle
 # impose GOTOOLCHAIN=local, un tag flottant donnerait la stdlib présente au moment du build.
-FROM golang:1.26.10-alpine AS build
+FROM golang:1.27.3-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
